@@ -1,0 +1,1 @@
+Component({properties:{name:{type:String,value:''},cover:{type:String,value:''},emoji:{type:String,value:''},species:{type:String,value:'其他'},tone:{type:String,value:'sage'},caption:{type:String,value:'时光笔记'},locked:{type:Boolean,value:false}}})

@@ -1,0 +1,9 @@
+{
+  "navigationBarTitleText": "登记一位小伙伴",
+  "disableScroll": false,
+  "usingComponents": {
+    "keepsake": "/components/keepsake/keepsake",
+    "pet-avatar": "/components/pet-avatar/pet-avatar",
+    "memorial-stone": "/components/memorial-stone/memorial-stone"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "component": true,
+  "usingComponents": {
+    "pet-sprite": "/components/pet-sprite/pet-sprite",
+    "memorial-stone": "/components/memorial-stone/memorial-stone"
+  }
+}

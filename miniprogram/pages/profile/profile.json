@@ -1,0 +1,11 @@
+{
+  "navigationBarTitleText": "守护者的主页",
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "inventory": "/components/inventory/inventory",
+    "gift-box": "/components/gift-box/gift-box",
+    "pet-avatar": "/components/pet-avatar/pet-avatar",
+    "backyard": "/components/backyard/backyard",
+    "guestbook": "/components/guestbook/guestbook"
+  }
+}

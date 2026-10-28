@@ -1,0 +1,48 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/cabinet/cabinet",
+    "pages/create/create",
+    "pages/memorial/memorial",
+    "pages/notebook/notebook",
+    "pages/profile/profile",
+    "pages/settings/settings"
+  ],
+  "window": {
+    "navigationBarTitleText": "星屿 · 小伙伴的星球",
+    "navigationBarBackgroundColor": "#eaf8ff",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#f3fbff"
+  },
+  "tabBar": {
+    "color": "#8da7b8",
+    "selectedColor": "#328ed1",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "探索",
+        "iconPath": "assets/map.png",
+        "selectedIconPath": "assets/map-active.png"
+      },
+      {
+        "pagePath": "pages/cabinet/cabinet",
+        "text": "我的主页",
+        "iconPath": "assets/folder.png",
+        "selectedIconPath": "assets/folder-active.png"
+      }
+    ]
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json",
+  "lazyCodeLoading": "requiredComponents",
+  "permission": {
+    "scope.userLocation": {
+      "desc": "仅在你主动选择地点时，帮助找到希望纪念的位置"
+    }
+  },
+  "requiredPrivateInfos": [
+    "chooseLocation"
+  ]
+}

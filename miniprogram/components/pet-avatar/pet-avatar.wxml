@@ -1,0 +1,1 @@
+<view class="avatar"><image wx:if="{{src}}" src="{{src}}" mode="aspectFill"/><view wx:else class="emoji">{{symbol}}</view></view>

@@ -1,0 +1,11 @@
+{
+  "usingComponents": {
+    "china-map": "/components/china-map/china-map"
+  },
+  "navigationBarTitleText": "星屿",
+  "navigationBarBackgroundColor": "#eaf8ff",
+  "navigationBarTextStyle": "black",
+  "enablePullDownRefresh": true,
+  "backgroundColor": "#eaf8ff",
+  "backgroundTextStyle": "dark"
+}

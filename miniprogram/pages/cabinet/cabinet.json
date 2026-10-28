@@ -1,0 +1,11 @@
+{
+  "navigationBarTitleText": "我的主页",
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "keepsake": "/components/keepsake/keepsake",
+    "pet-avatar": "/components/pet-avatar/pet-avatar",
+    "inventory": "/components/inventory/inventory",
+    "backyard": "/components/backyard/backyard",
+    "guestbook": "/components/guestbook/guestbook"
+  }
+}

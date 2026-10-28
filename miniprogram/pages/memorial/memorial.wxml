@@ -1,0 +1,33 @@
+<view wx:if="{{visitorPreview}}" class="visitor-preview-banner"><view><view>👀 正在预览普通访客视角</view><text>只展示公开内容，私密资料和库存不展示</text></view><button bindtap="exitPreview">退出预览</button></view><view wx:if="{{visitorPreview}}" class="visitor-preview-spacer"></view>
+<view wx:if="{{loading}}" class="page"><view class="empty">正在抵达它的小小星屿…</view></view>
+<view wx:elif="{{error}}" class="page"><view class="empty"><view class="empty-title serif">暂时没能找到这份想念</view><view>{{error}}</view><button class="primary" bindtap="load">重新寻找</button><button class="secondary back-home" bindtap="home">回到纪念星球</button></view></view>
+<view wx:elif="{{memorial}}" class="memorial-page">
+  <view wx:if="{{showTombstone}}" class="memorial-hero">
+    <view class="row top-label"><text class="eyebrow">FOREVER IN OUR HEARTS</text><text class="privacy-label">{{memorial.demo ? '示例纪念' : memorial.privacy === 'private' ? '☽ 仅自己可见' : '✧ 公开纪念'}}</text></view>
+    <view class="sky-star star-one">✧</view><view class="sky-star star-two">✦</view><view class="sky-star star-three">·</view>
+    <memorial-stone pet="{{memorial}}" photo="{{memorial.markerPhotoUrl || memorial.markerPhoto || photos[0] || ''}}"/>
+    <view class="stone-links">
+      <button class="stone-archive-link" bindtap="openArchive"><text class="stone-link-title">🐾 宠物档案</text><text class="stone-link-description">认识它，翻看故事与相册 ↗</text></button>
+      <button wx:if="{{canOpenNotebook}}" class="stone-notebook-link" bindtap="notebook"><text class="stone-link-title">📖 宠物笔记</text><text class="stone-link-description">{{notebookHint}}</text></button>
+      <view wx:else class="stone-link-unavailable"><text class="stone-link-title">📖 宠物笔记</text><text class="stone-link-description">{{notebookHint}}</text></view>
+    </view>
+    <view class="ground"><text>❀</text><text>✿</text><text>❁</text></view>
+    <view class="together">{{together}}</view>
+  </view>
+  <view wx:else class="living-hero"><view wx:if="{{archiveView}}" class="archive-eyebrow">PET PROFILE · 宠物档案</view><view class="eyebrow">{{memorial.lifeStatus === 'alive' ? 'LITTLE FRIEND, BIG HAPPINESS' : 'FOREVER A PART OF YOU'}}</view><view class="living-portrait"><pet-avatar src="{{photos[0] || ''}}" emoji="{{memorial.avatarEmoji}}" species="{{memorial.species}}"/></view><view class="living-name serif">{{memorial.name}}<text>{{memorial.lifeStatus === 'alive' ? '♡ 陪伴中' : '✧ 永远珍藏'}}</text></view><view class="living-no">{{memorial.demo ? '示例伙伴' : memorial.no ? 'No. ' + memorial.no : '专属宠物档案'}}</view><view class="living-breed">{{memorial.breed || memorial.species}}</view><view class="together">{{together}}</view></view>
+  <view class="memorial-content">
+    <view wx:if="{{archiveView}}" class="archive-information"><view class="section-title">{{memorial.name}}的档案</view><view><text>宠物类型</text><text>{{memorial.species}}{{memorial.breed ? ' · ' + memorial.breed : ''}}</text></view><view><text>出生日期</text><text>{{memorial.birthday || '尚未填写'}}</text></view><view><text>当前状态</text><text>{{memorial.lifeStatus === 'alive' ? '正在身边陪伴' : '永远珍藏的伙伴'}}</text></view><view wx:if="{{memorial.lifeStatus !== 'alive'}}"><text>离开日期</text><text>{{memorial.departed || '尚未填写'}}</text></view><button wx:if="{{hasMemorial}}" class="secondary archive-back" bindtap="openTombstone">回到它的墓碑 ↗</button></view>
+    <view wx:if="{{memorial.demo}}" class="demo-note">这是一份虚构示例，用来展示星屿的纪念方式。</view>
+    <view wx:if="{{showTombstone}}" class="location-card row" bindtap="visitLocation" aria-role="button" aria-label="查看纪念位置"><text class="location-icon">⌖</text><view><view>{{memorial.locationName}}</view><text>{{memorial.latitude}}, {{memorial.longitude}}</text></view><text>↗</text></view>
+    <view wx:if="{{memorial.no && showTombstone}}" class="pet-number">No. {{memorial.no}} · 每一位伙伴，都独一无二</view><button class="guardian-link row" bindtap="guardian"><text>✧ {{memorial.owner ? '前往我的主页，看看其他伙伴' : '到守护者的主页，认识更多伙伴'}}</text><text>↗</text></button>
+    <view class="story-section"><view class="eyebrow">EVERY LITTLE MEMORY</view><view class="section-title serif">{{memorial.lifeStatus === 'alive' ? '你好，认识一下。' : '我们的故事'}}</view><view class="story">{{memorial.story || '有些爱不必言说。那些一起度过的日子，永远留在心里。'}}</view></view>
+    <view wx:if="{{photos.length}}" class="album"><view class="row"><view class="section-title serif">记忆里的你</view><text class="muted">{{photos.length}} 个珍贵瞬间</text></view><view class="photo-grid"><image wx:for="{{photos}}" wx:key="*this" src="{{item}}" mode="aspectFill" data-src="{{item}}" bindtap="preview" aria-label="查看回忆照片" /></view></view>
+    <view wx:if="{{showTombstone || memorial.lifeStatus === 'alive'}}" class="flower-card"><view class="flower-illustration">{{memorial.lifeStatus === 'alive' ? '♡' : '❀'}}</view><view class="serif">{{memorial.lifeStatus === 'alive' ? '送一份小小的喜欢。' : '留一份心意，来看它。'}}</view><text>{{memorial.lifeStatus === 'alive' ? '小骨头、小鱼干、小罐头，都是温柔的心意。' : '每一份温柔的惦念，它都会收到。'}}</text><view wx:if="{{receivedGifts.length}}" class="pet-gift-totals"><text wx:for="{{receivedGifts}}" wx:key="id">{{item.icon}} {{item.count}}<text class="gift-kind-label"> {{item.name}}</text></text></view><view wx:if="{{receivedGifts.length}}" class="received-gift-value">收到的心意价值 {{receivedValue}} 积分</view><button class="flower-button" bindtap="gift">{{memorial.lifeStatus === 'alive' ? '打开礼物盒 ♡' : '送一份纪念心意 ♡'}}</button><view wx:if="{{showTombstone}}" class="flower-count">收到 {{memorial.flowers}} 朵鲜花</view></view>
+    <button wx:if="{{!showTombstone && canOpenNotebook}}" class="secondary notebook-link" bindtap="notebook">{{memorial.notebookPrivacy === 'public' ? '翻开它的公开笔记 ↗' : '🔒 翻开它的私密笔记 ↗'}}</button><view wx:if="{{memorial.owner}}" class="owner-actions"><button class="secondary" bindtap="edit">编辑档案</button><button wx:if="{{isCloud && !native && memorial.privacy === 'public'}}" class="primary" open-type="share">邀请亲友探访 ↗</button></view>
+    <view wx:if="{{!isCloud && !memorial.demo}}" class="footnote">本机体验 · 这份纪念只保存在当前设备<br/>{{memorial.privacy === 'public' ? '当前不会向其他设备发布；云端纪念需另行创建' : '这份私密纪念仅你自己可见'}}</view>
+    <button wx:if="{{memorial.owner}}" class="delete-button" bindtap="remove" disabled="{{deleting}}">删除这份纪念</button>
+    <view class="memorial-footer serif">山川湖海之间，爱一直都在。<text>✧ STELLAR PAWS</text></view>
+  </view>
+</view>
+
+<gift-box wx:if="{{giftPet}}" pet="{{giftPet}}" bindclose="closeGift" bindgifted="gifted" />

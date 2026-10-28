@@ -1,0 +1,9 @@
+<view class="stone-wrap {{compact ? 'compact' : ''}}">
+  <view class="stone {{pet.stone || 'arch'}}">
+    <view wx:if="{{pet.stone !== 'photo'}}" class="stone-symbol">{{pet.stone === 'star' ? '✧' : pet.stone === 'garden' ? '❀' : pet.stone === 'heart' ? '♡' : '☽'}}</view>
+    <view class="stone-portrait"><pet-avatar src="{{photo}}" emoji="{{pet.avatarEmoji}}" species="{{pet.species}}"/></view>
+    <view class="pet-name">{{pet.name || '它的名字'}}</view>
+    <block wx:if="{{!compact && pet.stone !== 'photo'}}"><view class="pet-breed">{{pet.breed || pet.species}}</view><view class="life-dates">{{pet.birthday ? pet.birthday + ' — ' : ''}}{{pet.departed}}</view></block>
+    <view wx:if="{{!compact}}" class="stone-epitaph">{{pet.epitaph || '谢谢你，来过我的世界。'}}</view>
+  </view>
+</view>

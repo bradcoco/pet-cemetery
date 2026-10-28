@@ -1,0 +1,13 @@
+{
+  "name": "xingyu-memorial",
+  "version": "1.0.0",
+  "main": "index.js",
+  "private": true,
+  "dependencies": {
+    "wx-server-sdk": "^4.0.2"
+  },
+  "overrides": {
+    "@cloudbase/database": "2.0.0",
+    "axios": "0.34.0"
+  }
+}

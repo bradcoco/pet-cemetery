@@ -1,0 +1,10 @@
+{
+  "navigationBarTitleText": "小小伙伴的档案",
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "gift-box": "/components/gift-box/gift-box",
+    "keepsake": "/components/keepsake/keepsake",
+    "pet-avatar": "/components/pet-avatar/pet-avatar",
+    "memorial-stone": "/components/memorial-stone/memorial-stone"
+  }
+}
