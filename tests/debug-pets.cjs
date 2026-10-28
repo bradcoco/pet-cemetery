@@ -1,0 +1,46 @@
+const assert = require('node:assert/strict')
+const KEYS = ['xingyu.memorials.v1', 'xingyu.notes.v1', 'xingyu.economy.v1', 'xingyu.garden.v1', 'xingyu.petOrder.v1', 'xingyu.nextPetNo.v1', 'xingyu.notebookSettings.v1', 'xingyu.debugPets.v1', 'xingyu.debugPets.v2', 'xingyu.cabinet.v1']
+module.exports = async function ({ store, storage, timeline, model, regions }) {
+  const saved = KEYS.map(key => [key, storage.has(key) ? structuredClone(storage.get(key)) : undefined])
+  try {
+    for (const key of KEYS) storage.delete(key)
+    store.seedDebugPets()
+    const pets = await store.listMemorials(true)
+    assert.equal(pets.length, 20)
+    for (const pet of pets) assert.equal(model.validateMemorial(pet), '', pet.name)
+    for (const pet of pets.filter(pet => pet.lifeStatus !== 'alive' && pet.hasMemorial !== false)) assert.ok(regions.provinceForPet(pet), pet.name)
+    const marks = timeline.anniversaries(pets, model.today()).map(item => `${item.name}:${item.kind}:${item.daysUntil}`).sort()
+    assert.deepEqual(marks, ['年糕:birthday:0', '团子:departed:0', '团子:birthday:2', '小满:birthday:5', '阿白:birthday:6', '阿白:departed:6'].sort())
+    const niangao = pets.find(pet => pet.id === 'debug-niangao')
+    const notes = await store.listNotes(niangao.id)
+    const gifts = await store.listGiftMoments(niangao.id)
+    const titles = timeline.petTimeline(niangao, notes, gifts).map(event => event.title)
+    assert.ok(titles.includes('来到这个世界'))
+    assert.ok(titles.includes('写进星屿'))
+    assert.ok(titles.some(title => title.includes('小骨头')))
+    assert.ok(titles.includes('公园'))
+    assert.deepEqual(notes.find(note => note.title === '公园').tagIds, ['tag-debug-sunny'])
+    assert.equal((await store.listNotes('debug-tuanzi', '', true)).length, 2)
+    await assert.rejects(store.listNotes('debug-niangao', '', true), /笔记/)
+    await assert.rejects(store.listNotes('debug-meiqiu'), /笔记/)
+    const garden = await store.getGarden()
+    assert.deepEqual(garden.pets.map(pet => pet.petId).sort(), ['debug-doubao', 'debug-niangao', 'debug-niunai', 'debug-xiaoman'])
+    assert.deepEqual([...garden.memorials].sort(), ['debug-bingbing', 'debug-haiyan', 'debug-huasheng', 'debug-huyang', 'debug-qingtuan', 'debug-shanzhu', 'debug-tuanzi', 'debug-wanfeng', 'debug-xingxing', 'debug-xueqiu', 'debug-yezi', 'debug-yunduo'])
+    assert.equal((await store.getWallet()).points, 200)
+    assert.equal((await store.listNotes('__overview__')).length, 1)
+    storage.delete('xingyu.debugPets.v2')
+    storage.set('xingyu.memorials.v1', storage.get('xingyu.memorials.v1').filter(pet => pet.id !== 'debug-doubao'))
+    store.seedDebugPets()
+    assert.equal((await store.listMemorials(true)).some(pet => pet.id === 'debug-doubao'), true)
+    store.seedDebugPets()
+    assert.equal((await store.listMemorials(true)).length, 20)
+    await store.deleteMemorial('debug-meiqiu')
+    store.seedDebugPets()
+    assert.equal((await store.listMemorials(true)).some(pet => pet.id === 'debug-meiqiu'), false)
+  } finally {
+    for (const [key, value] of saved) {
+      if (value === undefined) storage.delete(key)
+      else storage.set(key, value)
+    }
+  }
+}

@@ -1,16 +1,17 @@
 import { listMemorials, showError, isCloud } from '../../services/store'
-import { Memorial } from '../../utils/model'
+import { hasTombstone, Memorial } from '../../utils/model'
 import { toMapCoordinate } from '../../utils/geo'
 import { canUseMap } from '../../utils/platform'
 import { PROVINCES } from '../../data/provinces'
 import { provinceForPet, provincePoints } from '../../utils/provinces'
 import { markerAsset, markerPhoto, loadMarkerImage, exportPetMarker } from '../../utils/markers'
+import { PROVINCE_RANKING } from '../../data/province-ranking'
 const speciesIcon = (species: string) => species === '狗狗' ? '🐶' : species === '猫咪' ? '🐱' : species === '兔兔' ? '🐰' : species === '鸟儿' ? '🐦' : '🐾'
 Page({
   data: {
     loading: true, error: '', isCloud, records: [] as Memorial[], provincePets: [] as Memorial[], pointGroups: [] as Memorial[][], pointPets: [] as Memorial[], markers: [] as object[], polygons: [] as object[],
-    provinceCode: '', provinceName: '中国', examples: false,
-    mapLng: 104, mapLat: 35, scale: 5, mapAvailable: false,
+    provinceCode: '', provinceName: '中国', examples: false, pinned: null as Memorial | null, pinnedPhoto: '', pinnedNotebook: false, pinnedNotebookHint: '', pinScrollHeight: 420,
+    mapLng: 104, mapLat: 35, scale: 5, mapAvailable: false, podiumOpen: false, podiumShot: '', ranking: PROVINCE_RANKING,
   },
   markerVersion:0,
   markerJob:Promise.resolve(),
@@ -22,7 +23,11 @@ Page({
     this.setData({ loading: true, error: '' })
     try {
       const records = await listMemorials()
-      this.setData({ records, examples: records.some(p => p.demo) }); this.updateProvince()
+      const pinned = this.data.pinned ? records.find(pet => pet.id === this.data.pinned!.id) || null : null
+      this.setData({ records, examples: records.some(p => p.demo) })
+      if (this.data.pinned && !pinned) this.setData({ pinned: null })
+      else if (pinned) this.pin(pinned)
+      this.updateProvince()
     }
     catch (error) { this.setData({ error: showError(error) }) }
     finally { this.setData({ loading: false }) }
@@ -36,6 +41,20 @@ Page({
   },
   provinceTap(e: WechatMiniprogram.CustomEvent<{code: string}>) { this.selectProvince(e.detail.code) },
   national() { this.markerVersion++; this.setData({ provinceCode: '', provinceName: '中国', provincePets: [], pointGroups: [], pointPets: [], markers: [], polygons: [] }) },
+  pin(pet: Memorial) {
+    const tombstone = hasTombstone(pet)
+    const pinnedNotebook = pet.notebookEnabled !== false && (!tombstone || pet.memorialNotebook !== false) && Boolean(pet.owner || pet.notebookPrivacy === 'public')
+    const pinnedNotebookHint = pet.notebookEnabled === false ? '尚未开启笔记本' : tombstone && pet.memorialNotebook === false ? '主人暂未展示笔记入口' : !pinnedNotebook ? '🔒 笔记未公开' : pet.notebookPrivacy === 'public' ? '阅读日常与回忆 ↗' : '🔒 查看自己的私密笔记 ↗'
+    this.setData({ pinned: pet, pinnedPhoto: pet.markerPhotoUrl || pet.markerPhoto || (pet.photoUrls && pet.photoUrls[0]) || pet.photos[0] || '', pinnedNotebook, pinnedNotebookHint, pointPets: [] }, () => this.measurePin())
+  },
+  measurePin() {
+    wx.nextTick(() => this.createSelectorQuery().select('.world').boundingClientRect(rect => {
+      if (!rect || rect.height < 80) return
+      const pinScrollHeight = Math.floor(rect.height - 20)
+      if (pinScrollHeight !== this.data.pinScrollHeight) this.setData({ pinScrollHeight })
+    }).exec())
+  },
+  closePin() { this.setData({ pinned: null }) },
   updateProvince() {
     const province = PROVINCES.find(p => p.code === this.data.provinceCode)
     if (!province) return
@@ -57,7 +76,7 @@ Page({
     if(!this.data.mapAvailable||!pets.length)return
     this.markerJob=this.markerJob.then(async()=>{
       if(version!==this.markerVersion)return
-      const canvas=await new Promise<WechatMiniprogram.Canvas|null>(resolve=>this.createSelectorQuery().select('#marker-canvas').fields({node:true}).exec(result=>resolve(result[0]?.node||null)))
+      const canvas=await new Promise<WechatMiniprogram.Canvas|null>(resolve=>this.createSelectorQuery().select('#marker-canvas').fields({node:true}).exec(result=>resolve((result[0]&&result[0].node)||null)))
       if(!canvas||version!==this.markerVersion)return
       const images=await Promise.all(pets.map(p=>loadMarkerImage(canvas,markerPhoto(p))))
       for(let i=0;i<pets.length;i++){
@@ -77,17 +96,32 @@ Page({
   markerTap(e: WechatMiniprogram.CustomEvent<{markerId: number}>) {
     const pets = this.data.pointGroups[e.detail.markerId]
     if (!pets || !pets.length) return
-    if (pets.length === 1) this.open(pets[0].id)
+    if (pets.length === 1) this.pin(pets[0])
     else this.setData({ pointPets: pets })
   },
   petTap(e: WechatMiniprogram.CustomEvent<{id: string}>) {
     const pets = this.data.pointGroups.find(group => group.some(p => p.id === e.detail.id))
-    if (pets && pets.length > 1) this.setData({ pointPets: pets }); else this.open(e.detail.id)
+    const pet = (pets || this.data.provincePets).find(item => item.id === e.detail.id)
+    if (pets && pets.length > 1) this.setData({ pointPets: pets })
+    else if (pet) this.pin(pet)
   },
-  pointPet(e: WechatMiniprogram.TouchEvent) { this.open(e.currentTarget.dataset.id); this.closePoint() },
+  pointPet(e: WechatMiniprogram.TouchEvent) {
+    const pet = this.data.pointPets.find(item => item.id === e.currentTarget.dataset.id)
+    if (pet) this.pin(pet)
+  },
   closePoint() { this.setData({ pointPets: [] }) },
+  openPodium() {
+    const map = this.selectComponent('#province-overview') as { snapshot?: (done: (path: string) => void) => void } | null
+    const open = (podiumShot: string) => this.setData({ podiumOpen: true, podiumShot })
+    if (map && map.snapshot) map.snapshot(open)
+    else open('')
+  },
+  closePodium() { this.setData({ podiumOpen: false, podiumShot: '' }) },
   stopTap() {},
   open(id: string) { wx.navigateTo({ url: `/pages/memorial/memorial?id=${encodeURIComponent(id)}` }) },
+  openPinned() { const pet = this.data.pinned; if (pet) this.open(pet.id) },
+  openArchive() { const pet = this.data.pinned; if (pet) wx.navigateTo({ url: `/pages/memorial/memorial?id=${encodeURIComponent(pet.id)}&view=archive` }) },
+  openNotebook() { const pet = this.data.pinned; if (pet && this.data.pinnedNotebook) wx.navigateTo({ url: `/pages/notebook/notebook?id=${encodeURIComponent(pet.id)}` }) },
   mapError() { this.setData({ mapAvailable: false }) },
-  onShareAppMessage() { return { title: '星屿 · 在地图上，看望想念的小伙伴', path: '/pages/index/index' } },
+  onShareAppMessage() { return { title: '野岛 · 在地图上，看望想念的小伙伴', path: '/pages/index/index' } },
 })

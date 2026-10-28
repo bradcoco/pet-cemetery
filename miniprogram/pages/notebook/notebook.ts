@@ -208,10 +208,11 @@ Page({
     try{await removeNotebookMember(this.id,member.id,this.bookId);await this.refreshSharing()}catch(error){this.setData({sharingError:showError(error)})}finally{this.setData({sharingBusy:false})}
   },
   onShareAppMessage(e){
-    if(this.data.privacy==='public'&&e?.target?.dataset?.share!=='invite')return {title:this.data.overview?'全体伙伴 · 总览记事本':this.data.memorial!.name+'的时光笔记',path:'/pages/notebook/notebook?'+(this.data.overview?'bookId='+encodeURIComponent(this.data.publicBookId):'id='+encodeURIComponent(this.id))}
-    return this.data.isOwner&&this.data.sharing.code?{title:'邀请你一起记录'+(this.data.overview?'全体伙伴的故事':this.data.memorial!.name+'的故事'),path:'/pages/notebook/notebook?invite='+this.data.sharing.code}:{title:'星屿 · 宠物档案',path:'/pages/cabinet/cabinet'}
+    const share=e&&e.target&&e.target.dataset&&(e.target.dataset as {share?:string}).share
+    if(this.data.privacy==='public'&&share!=='invite')return {title:this.data.overview?'全体伙伴 · 总览记事本':this.data.memorial!.name+'的时光笔记',path:'/pages/notebook/notebook?'+(this.data.overview?'bookId='+encodeURIComponent(this.data.publicBookId):'id='+encodeURIComponent(this.id))}
+    return this.data.isOwner&&this.data.sharing.code?{title:'邀请你一起记录'+(this.data.overview?'全体伙伴的故事':this.data.memorial!.name+'的故事'),path:'/pages/notebook/notebook?invite='+this.data.sharing.code}:{title:'野岛 · 宠物档案',path:'/pages/cabinet/cabinet'}
   },
-  openPet(e:WechatMiniprogram.TouchEvent){const id=e.currentTarget.dataset.id,pet=this.data.overviewPets.find(p=>p.id===id);wx.navigateTo({url:(pet?.notebookEnabled===false?'/pages/memorial/memorial?id=':'/pages/notebook/notebook?id=')+encodeURIComponent(id)})},
+  openPet(e:WechatMiniprogram.TouchEvent){const id=e.currentTarget.dataset.id,pet=this.data.overviewPets.find(p=>p.id===id);wx.navigateTo({url:(pet&&pet.notebookEnabled===false?'/pages/memorial/memorial?id=':'/pages/notebook/notebook?id=')+encodeURIComponent(id)})},
   memorial() { if(this.data.visitorPreview){wx.navigateBack({delta:1,fail:()=>this.cabinet()});return}if(!this.data.isOwner||this.data.overview){this.cabinet();return} wx.navigateTo({ url: `/pages/memorial/memorial?id=${encodeURIComponent(this.id)}` }) },
   cabinet() { wx.switchTab({ url: '/pages/cabinet/cabinet' }) },
 })

@@ -7,7 +7,7 @@ const less = require('less')
 const root = path.resolve(__dirname, '..')
 const output = fs.mkdtempSync(path.join(os.tmpdir(), 'xingyu-test-'))
 const typescript = path.join(root, 'node_modules/typescript/bin/tsc')
-function files(dir) { return fs.readdirSync(dir, { withFileTypes: true }).flatMap(f => f.isDirectory() ? files(path.join(dir, f.name)) : [path.join(dir, f.name)]) }
+function files(dir) { return fs.readdirSync(dir, { withFileTypes: true }).flatMap(f => f.name.startsWith('._') ? [] : f.isDirectory() ? files(path.join(dir, f.name)) : [path.join(dir, f.name)]) }
 let count = 0
 function check(name, fn) { fn(); count++; console.log('✓', name) }
 async function main() {
@@ -84,7 +84,10 @@ async function main() {
   global.wx={getStorageSync:key=>storage.get(key),setStorageSync:(key,value)=>storage.set(key,structuredClone(value)),showToast:()=>{},saveFile:async({tempFilePath})=>({savedFilePath:`saved:${tempFilePath}`})}
   const store=require(path.join(output,'miniprogram/services/store.js'))
   await require('./check-in.cjs')({items,domain,store,storage})
-  check('签到：21 天连签、每周奖励、断签、北京时间零点、跨年闰日、旧库存兼容及本机重复领取',()=>{})
+  await require('./debug-pets.cjs')({store,storage,timeline:require(path.join(output,'miniprogram/utils/timeline.js')),model,regions:require(path.join(output,'miniprogram/utils/provinces.js'))})
+  check('调试宠物：本机首次启动写入可编辑档案，纪念日、时间线、家园和访客笔记可用，删除后不会自动补回',()=>{})
+  check('签到：首日 30 分、连签每天 +10、断签、北京时间零点、跨年闰日、旧库存兼容、积分兑换及本机重复领取',()=>{})
+  check('纪念日与时间线：近 7 天、闰日改在 2 月 28 日、活着的伙伴不算离开日，笔记和带日期的礼物按时间串起来',()=>require('./timeline.cjs')({timeline:require(path.join(output,'miniprogram/utils/timeline.js'))}))
   const id=await store.saveMemorial(input,'','first-pet')
   assert.equal(await store.saveMemorial(input,'','first-pet'),id)
   assert.equal((await store.getMemorial(id)).no,'000000')
@@ -93,8 +96,9 @@ async function main() {
   assert.equal((await store.listMemorials()).length,5)
   assert.equal((await store.getMemorial(id)).privacy,'private')
   await assert.rejects(store.sendFlower(id),/签到/)
-  const reward=await store.claimDaily();assert.deepEqual(reward.balances,items.checkInStatus(items.emptyWallet()).rewards)
-  assert.deepEqual((await store.claimDaily()).balances,reward.balances)
+  const reward=await store.claimDaily();assert.equal(reward.points,30);assert.equal(reward.streak,1);assert.deepEqual(reward.balances,items.emptyInventory())
+  assert.equal((await store.claimDaily()).points,reward.points)
+  assert.equal((await store.exchangeItem('flower')).points,0)
   assert.equal((await store.sendGift(id,'flower','same-gift')).flowers,1)
   assert.equal((await store.sendGift(id,'flower','same-gift')).flowers,1)
   assert.equal((await store.getWallet()).balances.flower,0)

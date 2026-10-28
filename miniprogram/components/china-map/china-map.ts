@@ -10,8 +10,8 @@ interface MapState {
   shapes: { code: string; polygons: number[][][][] }[]; labels: { code: string; x: number; y: number; width: number }[]; pins: { id: string; x: number; y: number }[]
   zoom: number; panX: number; panY: number; start: Finger | null; last: Finger | null; pinch: number; moved: boolean
 }
-const properties = { province: { type: String, value: '' }, pets: { type: Array, value: [] as Memorial[] } }
-type Methods = { [K in 'init' | 'render' | 'draw' | 'hit' | 'canvasError' | 'retry' | 'touchStart' | 'touchMove' | 'touchEnd' | 'touchCancel' | 'setZoom' | 'zoomIn' | 'zoomOut' | 'reset' | 'clampPan' | 'report']: (...args: any[]) => void }
+const properties = { province: { type: String, value: '' }, pets: { type: Array, value: [] as Memorial[] }, tools: { type: Boolean, value: true } }
+type Methods = { [K in 'init' | 'render' | 'draw' | 'hit' | 'canvasError' | 'retry' | 'touchStart' | 'touchMove' | 'touchEnd' | 'touchCancel' | 'setZoom' | 'zoomIn' | 'zoomOut' | 'reset' | 'clampPan' | 'report' | 'snapshot']: (...args: any[]) => void }
 const offsets: Record<string, number[]> = { '110000': [-7,-8], '120000': [12,4], '310000': [12,0], '810000': [14,-2], '820000': [-6,12] }
 Component<{ failed: boolean; currentZoom: number; zoomLabel: string }, typeof properties, Methods, { state: MapState }>({
   properties,
@@ -78,7 +78,7 @@ Component<{ failed: boolean; currentZoom: number; zoomLabel: string }, typeof pr
           this.state.labels.push({ code: p.code, x, y, width: p.short.length * 10 })
         }
         if (zoom === 1) {
-          const iw = 48, ih = 73, ix = w - iw - 12, iy = h - ih - 15
+          const iw = 48, ih = 73, ix = w - iw - 12, iy = h - ih - 96
           c.save(); c.beginPath(); c.rect(ix,iy,iw,ih); c.clip(); c.fillStyle = '#f1faff'; c.fillRect(ix,iy,iw,ih)
           const seaPoint = (p: number[]) => [ix + (p[0]-105)/21*iw, iy + (25-p[1])/23*ih]
           c.fillStyle = '#b8d9cd'; c.strokeStyle = '#94bfb6'; c.lineWidth = .7
@@ -143,5 +143,10 @@ Component<{ failed: boolean; currentZoom: number; zoomLabel: string }, typeof pr
     touchCancel() { this.state.start = null; this.state.last = null; this.state.pinch = 0 },
     canvasError() { this.setData({ failed: true }) },
     retry() { this.setData({ failed: false }); wx.nextTick(() => this.init()) },
+    snapshot(done: (path: string) => void) {
+      const canvas = this.state.canvas
+      if (!canvas) { done(''); return }
+      wx.canvasToTempFilePath({ canvas, success: result => done(result.tempFilePath), fail: () => done('') }, this)
+    },
   },
 })

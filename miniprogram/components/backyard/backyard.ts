@@ -17,7 +17,7 @@ Component<Data,typeof properties,Methods,{timer:number|null; cursor:number; deta
   pageLifetimes: { show() { this.setData({active:true});this.start();this.load() }, hide() { this.setData({active:false});this.stop() } },
   methods: {
     async load() {
-      if(this.properties.readOnly){this.setData({garden:(this.properties.publicGarden as PublicGarden)?.layout||emptyGarden(),loading:false,error:'',opened:false,placing:null,selected:''});this.sync();return}
+      if(this.properties.readOnly){const shared=this.properties.publicGarden as PublicGarden;this.setData({garden:(shared&&shared.layout)||emptyGarden(),loading:false,error:'',opened:false,placing:null,selected:''});this.sync();return}
       if(this.data.saving||this.loadingRequest) return
       this.loadingRequest=true
       this.setData({loading:true,error:''})
@@ -26,8 +26,8 @@ Component<Data,typeof properties,Methods,{timer:number|null; cursor:number; deta
       finally{this.loadingRequest=false;if(!this.detached)this.setData({loading:false})}
     },
     sync() {
-      const readOnly=this.properties.readOnly,publicGarden=this.properties.publicGarden as PublicGarden,mine=readOnly?[]:ownPets(this.properties.records as Memorial[]),records:GardenRecord[]=readOnly?publicGarden?.records||[]:mine
-      const garden:Garden=readOnly?publicGarden?.layout||emptyGarden():normalizeGarden(this.data.garden,mine),old=new Map(this.data.actors.map(p=>[p.id,p]))
+      const readOnly=this.properties.readOnly,publicGarden=this.properties.publicGarden as PublicGarden,mine=readOnly?[]:ownPets(this.properties.records as Memorial[]),records:GardenRecord[]=readOnly?(publicGarden&&publicGarden.records)||[]:mine
+      const garden:Garden=readOnly?(publicGarden&&publicGarden.layout)||emptyGarden():normalizeGarden(this.data.garden,mine),old=new Map(this.data.actors.map(p=>[p.id,p]))
       const actors=garden.pets.map(p=>{
         const pet=records.find(m=>m.id===p.petId)!,previous=old.get(p.petId)
         return previous&&previous.homeX===p.x&&previous.homeY===p.y?{...previous,name:pet.name,species:pet.species,avatarEmoji:pet.avatarEmoji||''}:{id:pet.id,avatarEmoji:pet.avatarEmoji||'',name:pet.name,species:pet.species,x:p.x,y:p.y,homeX:p.x,homeY:p.y,facing:1,walking:false,until:0,happyUntil:0,happy:false}
@@ -103,7 +103,7 @@ Component<Data,typeof properties,Methods,{timer:number|null; cursor:number; deta
     returnPet(e:WechatMiniprogram.TouchEvent){if(this.properties.readOnly)return;const pet=(this.properties.records as Memorial[]).find(p=>p.id===e.currentTarget.dataset.id);if(pet&&pet.lifeStatus==='alive')this.putBack(e);else this.removeGrave(e)},
     movePet(){if(this.properties.readOnly)return;const pet=(this.properties.records as Memorial[]).find(p=>p.id===this.data.selected);if(pet)this.setData({placing:pet,selected:''})},
     petProfile(){if(this.data.selected)wx.navigateTo({url:'/pages/memorial/memorial?id='+encodeURIComponent(this.data.selected)+(this.properties.visitorPreview?'&preview=1':'')})},
-    graveTap(e:WechatMiniprogram.TouchEvent){if(this.properties.readOnly&&!(this.properties.publicGarden as PublicGarden)?.records.some(p=>p.id===e.currentTarget.dataset.id))return;wx.navigateTo({url:'/pages/memorial/memorial?id='+encodeURIComponent(e.currentTarget.dataset.id)+(this.properties.visitorPreview?'&preview=1':'')})},
+    graveTap(e:WechatMiniprogram.TouchEvent){const shared=this.properties.publicGarden as PublicGarden;if(this.properties.readOnly&&!(shared&&shared.records.some(p=>p.id===e.currentTarget.dataset.id)))return;wx.navigateTo({url:'/pages/memorial/memorial?id='+encodeURIComponent(e.currentTarget.dataset.id)+(this.properties.visitorPreview?'&preview=1':'')})},
     addGrave(id:string){if(this.properties.readOnly)return;const garden=normalizeGarden(this.data.garden,this.properties.records as Memorial[]);if(!garden.memorials.includes(id))garden.memorials.push(id);this.commit(garden,'已安放在纪念花园')},
     removeGrave(e:WechatMiniprogram.TouchEvent){if(this.properties.readOnly)return;const garden=normalizeGarden(this.data.garden,this.properties.records as Memorial[]);garden.memorials=garden.memorials.filter(id=>id!==e.currentTarget.dataset.id);this.commit(garden,'纪念物已收回宠物仓')},
     createPet(){if(!this.properties.readOnly)wx.navigateTo({url:'/pages/create/create'})},

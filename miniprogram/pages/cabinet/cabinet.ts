@@ -1,28 +1,30 @@
-import { getProfile, saveProfile, listMemorials, persistPhoto, showError, modeLabel, isCloud, getWallet, claimDaily, getPetOrder, savePetOrder, setPetStatus, listSharedNotebooks, getNotebook, getGardenPrivacy } from '../../services/store'
-import { Memorial, ownPets, PetFilter, Profile, Privacy } from '../../utils/model'
+import { getProfile, saveProfile, listMemorials, persistPhoto, showError, modeLabel, isCloud, getWallet, claimDaily, exchangeItem, getPetOrder, savePetOrder, setPetStatus, listSharedNotebooks, getNotebook } from '../../services/store'
+import { Memorial, ownPets, PetFilter, Profile, today } from '../../utils/model'
+import { anniversaries, Anniversary } from '../../utils/timeline'
 import { choosePhotos, confirmPetRevival } from '../../utils/platform'
 import { orderedPets, movePetOrder } from '../../utils/pet-order'
-import { emptyWallet } from '../../utils/items'
+import { checkInPoints, emptyWallet, ItemKind } from '../../utils/items'
 import { SharedNotebook } from '../../utils/notebooks'
 import { OVERVIEW_NOTEBOOK } from '../../utils/cabinet'
 Page({
   data: {
     profile:{nickName:'星屿的守护者',avatarUrl:''} as Profile,records:[] as Memorial[],visible:[] as Memorial[],notebooks:[] as Memorial[],filter:'all' as PetFilter,aliveCount:0,departedCount:0,
-    loading:true,error:'',modeLabel,isCloud,editing:false,profileSaving:false,draftName:'',draftAvatar:'',wallet:emptyWallet(),claiming:false,
-    sorting:false,mutating:false,gardenOpen:false,overviewPublic:false,gardenPrivacy:'private' as Privacy,
+    loading:true,error:'',modeLabel,isCloud,editingName:false,profileSaving:false,draftName:'',wallet:emptyWallet(),claiming:false,
+    sorting:false,mutating:false,gardenOpen:false,overviewPublic:false,anniversaries:[] as Anniversary[],profilePhoto:true,
     sharedBooks:[] as SharedNotebook[],sharedError:'',acceptingInvite:false,inviteInput:'',
   },
+  onLoad(){this.setData({profilePhoto:wx.getStorageSync('xingyu.homeProfileStyle.v1')!=='plain'})},
   onShow(){this.load()},
+  toggleProfileStyle(){const profilePhoto=!this.data.profilePhoto;wx.setStorageSync('xingyu.homeProfileStyle.v1',profilePhoto?'photo':'plain');this.setData({profilePhoto})},
   toggleGarden(){this.setData({gardenOpen:!this.data.gardenOpen})},
   privacySettings(){wx.navigateTo({url:'/pages/settings/settings'})},
-  gardenSettings(){wx.navigateTo({url:'/pages/settings/settings?section=garden'})},
-  async onPullDownRefresh(){await this.load();await this.selectComponent('#my-guestbook')?.retry();wx.stopPullDownRefresh()},
+  async onPullDownRefresh(){await this.load();const guestbook=this.selectComponent('#my-guestbook') as {retry?:()=>Promise<void>}|null;if(guestbook&&guestbook.retry)await guestbook.retry();wx.stopPullDownRefresh()},
   async load(){
     this.setData({loading:true,error:''})
     this.loadShared()
     try{
-      const [profile,raw,wallet,order,overview,gardenPrivacy]=await Promise.all([getProfile(),listMemorials(true),getWallet(),getPetOrder(),getNotebook(OVERVIEW_NOTEBOOK),getGardenPrivacy()]),records=orderedPets(raw,order)
-      this.setData({profile,records,wallet,gardenPrivacy,overviewPublic:overview.privacy==='public',aliveCount:ownPets(records,'alive').length,departedCount:ownPets(records,'departed').length});this.applyFilter()
+      const [profile,raw,wallet,order,overview]=await Promise.all([getProfile(),listMemorials(true),getWallet(),getPetOrder(),getNotebook(OVERVIEW_NOTEBOOK)]),records=orderedPets(raw,order)
+      this.setData({profile,records,wallet,overviewPublic:overview.privacy==='public',anniversaries:anniversaries(ownPets(records),today()),aliveCount:ownPets(records,'alive').length,departedCount:ownPets(records,'departed').length});this.applyFilter()
     }catch(error){this.setData({error:showError(error)})}finally{this.setData({loading:false})}
   },
   async loadShared(){try{this.setData({sharedBooks:await listSharedNotebooks(),sharedError:''})}catch(error){this.setData({sharedError:error instanceof Error?error.message:'共写笔记暂时未能加载'})}},
@@ -68,27 +70,43 @@ Page({
       wx.showToast({title:alive?'已移入已故档案':'已复活，回到现存伙伴',icon:'none'})
     }catch(error){showError(error)}finally{this.setData({mutating:false})}
   },
-  notebook(e:WechatMiniprogram.TouchEvent){const id=e.currentTarget.dataset.id,pet=this.data.records.find(p=>p.id===id);wx.navigateTo({url:(pet?.notebookEnabled===false?'/pages/settings/settings?id=':'/pages/notebook/notebook?id=')+encodeURIComponent(id)})},
+  notebook(e:WechatMiniprogram.TouchEvent){const id=e.currentTarget.dataset.id,pet=this.data.records.find(p=>p.id===id);wx.navigateTo({url:(pet&&pet.notebookEnabled===false?'/pages/settings/settings?id=':'/pages/notebook/notebook?id=')+encodeURIComponent(id)})},
   overview(){wx.navigateTo({url:'/pages/notebook/notebook?overview=1'})},
   create(){wx.navigateTo({url:'/pages/create/create'})},
   homepage(){wx.navigateTo({url:'/pages/profile/profile?user='+encodeURIComponent(this.data.profile.id||'local-guardian')})},
+  openAnniversary(e:WechatMiniprogram.TouchEvent){wx.navigateTo({url:'/pages/memorial/memorial?id='+encodeURIComponent(e.currentTarget.dataset.id)})},
   previewHomepage(){wx.navigateTo({url:'/pages/profile/profile?user='+encodeURIComponent(this.data.profile.id||'local-guardian')+'&preview=1'})},
   async claim(){
     if(this.data.claiming)return
     this.setData({claiming:true})
-    try{this.setData({wallet:await claimDaily()});wx.showToast({title:'签到成功，奖励已到账',icon:'none'})}catch(error){showError(error)}finally{this.setData({claiming:false})}
+    try{const wallet=await claimDaily();this.setData({wallet});wx.showToast({title:`连续签到 ${wallet.streak} 天，+${checkInPoints(wallet.streak||1)} 积分`,icon:'none'})}catch(error){showError(error)}finally{this.setData({claiming:false})}
   },
-  editProfile(){this.setData({editing:!this.data.editing,draftName:this.data.profile.nickName,draftAvatar:this.data.profile.avatarFile||this.data.profile.avatarUrl})},
+  async exchange(e:WechatMiniprogram.CustomEvent<{kind:ItemKind}>){
+    if(this.data.claiming)return
+    this.setData({claiming:true})
+    try{this.setData({wallet:await exchangeItem(e.detail.kind)});wx.showToast({title:'兑换成功',icon:'success'})}catch(error){showError(error)}finally{this.setData({claiming:false})}
+  },
+  nameEditing:false,nameLock:false,
+  editName(){if(this.data.profileSaving||this.nameEditing)return;this.nameEditing=true;this.setData({editingName:true,draftName:this.data.profile.nickName})},
   nameInput(e:WechatMiniprogram.Input){this.setData({draftName:e.detail.value})},
-  async avatar(){
-    if(this.data.profileSaving)return
+  async saveName(){
+    if(!this.nameEditing||this.nameLock)return
+    this.nameLock=true
+    const nickName=this.data.draftName.trim()
+    if(!nickName||nickName===this.data.profile.nickName){this.nameEditing=false;this.setData({editingName:false,draftName:this.data.profile.nickName});if(!nickName)wx.showToast({title:'昵称需要 1～20 个字',icon:'none'});this.nameLock=false;return}
     this.setData({profileSaving:true})
-    try{const paths=await choosePhotos(1);if(paths[0])this.setData({draftAvatar:await persistPhoto(paths[0])})}catch(error){if(!String((error as {errMsg?:string}).errMsg).includes('cancel'))showError(error)}finally{this.setData({profileSaving:false})}
+    try{await saveProfile({nickName,avatarUrl:this.data.profile.avatarFile||this.data.profile.avatarUrl});this.nameEditing=false;this.setData({editingName:false,profile:await getProfile()})}
+    catch(error){showError(error)}finally{this.nameLock=false;this.setData({profileSaving:false})}
   },
-  async saveProfile(){
+  async changeAvatar(){
     if(this.data.profileSaving)return
-    this.setData({profileSaving:true})
-    try{await saveProfile({nickName:this.data.draftName.trim(),avatarUrl:this.data.draftAvatar});this.setData({editing:false,profile:await getProfile()});wx.showToast({title:'已保存',icon:'success'})}catch(error){showError(error)}finally{this.setData({profileSaving:false})}
+    let path=''
+    try{const paths=await choosePhotos(1);path=paths[0]||''}catch(error){if(!String((error as {errMsg?:string}).errMsg).includes('cancel'))showError(error);return}
+    if(!path)return
+    const previous=this.data.profile.avatarUrl
+    this.setData({profileSaving:true,'profile.avatarUrl':path})
+    try{const file=await persistPhoto(path);await saveProfile({nickName:this.data.profile.nickName,avatarUrl:file});this.setData({profile:await getProfile()})}
+    catch(error){showError(error);this.setData({'profile.avatarUrl':previous})}finally{this.setData({profileSaving:false})}
   },
   about(){wx.showModal({title:'关于宠物档案',content:'登记时可选择是否同步创建整本宠物笔记，也可在「隐私设置」中开启或隐藏。私密笔记标有 🔒，仅自己与受邀好友可见；公开笔记允许访客阅读。总览笔记记录大家共同的日常。\n\n'+(isCloud?'档案与云端账户关联。':'当前为本机体验，照片和笔记保存在当前设备。跨设备共写需要启用微信云开发账户。'),showCancel:false,confirmColor:'#5badeb'})},
 })

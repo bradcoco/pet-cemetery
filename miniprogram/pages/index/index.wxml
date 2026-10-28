@@ -1,16 +1,46 @@
-<view class="home">
-  <view class="home-heading"><view class="home-brand"><text class="brand-icon">✦</text><text>星屿</text><text class="brand-subtitle">小伙伴的世界</text></view><view class="map-status"><text></text>{{isCloud ? '一起看世界' : '我的小世界'}}</view></view>
-  <view class="map-card">
-    <view class="map-toolbar"><view class="province-title">⌖ {{provinceName}}{{!provinceCode ? '省份地图' : ''}}</view><button wx:if="{{provinceCode}}" class="back-national" bindtap="national">← 返回</button></view>
-    <view class="map-subtitle"><text>{{provinceCode ? provincePets.length + ' 只小伙伴在这里' : '放大地图，点击想去的省份'}}</text><text wx:if="{{examples}}" class="example-tag">含示例点位</text></view>
-    <view class="world">
-      <china-map id="province-overview" wx:if="{{!provinceCode || !mapAvailable}}" province="{{provinceCode}}" pets="{{provincePets}}" bindprovincechange="provinceTap" bindpettap="petTap" />
+<view class="home {{pinned ? 'pinned' : ''}}">
+  <view class="world {{pinned ? 'world-split' : ''}}">
+    <view wx:if="{{!podiumOpen}}" class="map-stage">
+      <china-map id="province-overview" wx:if="{{!provinceCode || !mapAvailable}}" province="{{provinceCode}}" pets="{{provincePets}}" tools="{{!podiumOpen}}" bindprovincechange="provinceTap" bindpettap="petTap" />
       <map wx:else id="pet-map" class="map" longitude="{{mapLng}}" latitude="{{mapLat}}" scale="{{scale}}" markers="{{markers}}" polygons="{{polygons}}" enable-scroll="{{true}}" enable-zoom="{{true}}" bindmarkertap="markerTap" bindcallouttap="markerTap" binderror="mapError" />
     </view>
-    <view class="map-bottom"><view wx:if="{{provinceCode}}" class="species-legend"><text>🐱 猫咪</text><text>🐶 狗狗</text><text>🐰 兔兔</text><text>🐦 鸟儿</text><text>🐾 其他</text></view><view class="map-hint">{{!provinceCode ? '双指放大 · 拖动查看 · 点击省份进入' : provincePets.length ? '双指缩放地图 · 点击宠物标记探访' : '这里还没有公开的宠物点位'}}</view></view>
+    <view wx:if="{{pinned && !podiumOpen}}" class="map-pin">
+      <scroll-view class="map-pin-scroll" style="height: {{pinScrollHeight}}px" scroll-y="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
+        <view class="map-pin-body">
+        <button class="map-pin-close" catchtap="closePin" aria-label="关闭墓碑">×</button>
+        <view class="map-pin-stone" bindtap="openPinned"><memorial-stone side="{{true}}" pet="{{pinned}}" photo="{{pinnedPhoto}}"/></view>
+        <view class="map-pin-links">
+          <button class="pin-archive" bindtap="openArchive"><text>🐾 宠物档案</text><text>认识它，翻看故事与相册 ↗</text></button>
+          <button wx:if="{{pinnedNotebook}}" class="pin-notebook" bindtap="openNotebook"><text>📖 宠物笔记</text><text>{{pinnedNotebookHint}}</text></button>
+          <view wx:else class="pin-notebook-off"><text>📖 宠物笔记</text><text>{{pinnedNotebookHint}}</text></view>
+        </view>
+        </view>
+      </scroll-view>
+    </view>
   </view>
+  <image wx:if="{{podiumOpen && podiumShot}}" class="podium-shot" src="{{podiumShot}}" mode="aspectFill"/>
+  <view class="map-float">
+    <view class="home-heading"><view class="home-brand"><text class="brand-icon">✦</text><text>野岛</text></view><view class="map-status"><text></text>{{isCloud ? '一起看世界' : '我的小世界'}}<text wx:if="{{examples}}" class="example-tag">示例</text></view></view>
+    <view wx:if="{{provinceCode}}" class="map-toolbar"><view class="province-title">{{provinceName}}</view><button class="back-national" bindtap="national">返回</button></view>
+  </view>
+  <view wx:if="{{provinceCode}}" class="map-bottom"><view class="species-legend"><text>🐱</text><text>🐶</text><text>🐰</text><text>🐦</text><text>🐾</text></view></view>
+  <button wx:if="{{!podiumOpen}}" class="podium-fab" bindtap="openPodium" aria-label="领奖台排行"><view class="podium-step second"><text>2</text></view><view class="podium-step first"><text>1</text></view><view class="podium-step third"><text>3</text></view></button>
   <view wx:if="{{error}}" class="home-error" bindtap="load">{{error}} · 点击重试</view>
 </view>
-<view wx:if="{{pointPets.length}}" class="point-mask" bindtap="closePoint"><view class="point-sheet" catchtap="stopTap"><view class="point-heading"><text>这个坐标的小伙伴</text><button bindtap="closePoint" aria-label="关闭">×</button></view><scroll-view class="point-scroll" scroll-y="true"><button wx:for="{{pointPets}}" wx:key="id" class="point-pet" data-id="{{item.id}}" bindtap="pointPet"><image src="{{item.photoUrls[0] || item.photos[0] || '/assets/pet.png'}}" mode="aspectFill"/><view><view>{{item.name}}</view><text>{{item.species}}{{item.no ? ' · No. ' + item.no : ''}}</text></view><text>去看望 ↗</text></button></scroll-view></view></view>
+<view wx:if="{{pointPets.length}}" class="point-mask" bindtap="closePoint"><view class="point-sheet" catchtap="stopTap"><view class="point-heading"><text>这个坐标的小伙伴</text><button bindtap="closePoint" aria-label="关闭">×</button></view><scroll-view class="point-scroll" scroll-y="true"><button wx:for="{{pointPets}}" wx:key="id" class="point-pet" data-id="{{item.id}}" bindtap="pointPet"><image src="{{item.photoUrls[0] || item.photos[0] || '/assets/pet.png'}}" mode="aspectFill"/><view><view>{{item.name}}</view><text>{{item.species}}{{item.no ? ' · No. ' + item.no : ''}}</text></view><text>看墓碑 ↗</text></button></scroll-view></view></view>
+<view wx:if="{{podiumOpen}}" class="point-mask podium-mask" bindtap="closePodium">
+  <view class="podium-sheet" catchtap="stopTap">
+    <view class="podium-heading"><view class="podium-titles"><text class="podium-title">排行榜</text><view class="podium-caption">各省在册宠物总积分</view></view><view class="podium-close" catchtap="closePodium" aria-role="button" aria-label="关闭">×</view></view>
+    <view class="rank-stage">
+      <view class="rank-column second"><view class="rank-badge">2</view><view class="rank-step"><text class="rank-place-name">{{ranking[1].name}}</text><text class="rank-place-points">{{ranking[1].pointsText}}</text></view></view>
+      <view class="rank-column first"><text class="rank-crown">✦</text><view class="rank-badge">1</view><view class="rank-step"><text class="rank-place-name">{{ranking[0].name}}</text><text class="rank-place-points">{{ranking[0].pointsText}}</text></view></view>
+      <view class="rank-column third"><view class="rank-badge">3</view><view class="rank-step"><text class="rank-place-name">{{ranking[2].name}}</text><text class="rank-place-points">{{ranking[2].pointsText}}</text></view></view>
+      <view class="rank-floor"></view>
+    </view>
+    <scroll-view class="podium-scroll" scroll-y="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
+      <view wx:for="{{ranking}}" wx:key="rank" wx:if="{{item.rank > 3}}" class="rank-row"><text class="rank-no">{{item.rank}}</text><view class="rank-copy"><view class="rank-name">{{item.name}}</view><text class="rank-meta">{{item.pets}} 只在册</text></view><text class="rank-points">{{item.pointsText}} 分</text></view>
+    </scroll-view>
+  </view>
+</view>
 
 <canvas type="2d" id="marker-canvas" class="marker-canvas"/>

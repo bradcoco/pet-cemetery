@@ -1,6 +1,6 @@
-import { claimDaily, getProfile, getPublicProfile, getWallet, isCloud, showError } from '../../services/store'
+import { claimDaily, exchangeItem, getProfile, getPublicProfile, getWallet, isCloud, showError } from '../../services/store'
 import { Memorial } from '../../utils/model'
-import { emptyWallet, GiftResult, ProfileCard, Wallet, receivedItems, inventoryValue } from '../../utils/items'
+import { checkInPoints, emptyWallet, GiftResult, ItemKind, ProfileCard, Wallet, receivedItems, inventoryValue } from '../../utils/items'
 import { isNativeApp } from '../../utils/platform'
 import { PublicGarden } from '../../utils/garden'
 const petView=(pet:Memorial)=>({...pet,receivedGifts:receivedItems(pet.gifts),receivedValue:inventoryValue(pet.gifts||{})})
@@ -14,7 +14,7 @@ Page({
   user: '',
   onLoad(options) { this.user = options.user || ''; this.setData({visitorPreview:options.preview==='1'});this.load() },
   onShow() { if (this.data.profile) this.load() },
-  async onPullDownRefresh() { await this.load(); await this.selectComponent('#public-guestbook')?.retry(); wx.stopPullDownRefresh() },
+  async onPullDownRefresh() { await this.load(); const guestbook=this.selectComponent('#public-guestbook') as {retry?:()=>Promise<void>}|null; if(guestbook&&guestbook.retry)await guestbook.retry(); wx.stopPullDownRefresh() },
   async load() {
     this.setData({ loading: true, error: '' })
     try {
@@ -31,7 +31,7 @@ Page({
   async claim() {
     if (!this.data.isOwner || this.data.visitorPreview || this.data.claiming) return
     this.setData({ claiming: true })
-    try { this.setData({ wallet: await claimDaily() }); wx.showToast({ title: '签到成功，奖励已到账', icon: 'none' }) }
+    try { const wallet=await claimDaily(); this.setData({ wallet }); wx.showToast({ title: `连续签到 ${wallet.streak} 天，+${checkInPoints(wallet.streak||1)} 积分`, icon: 'none' }) }
     catch (error) { showError(error) }
     finally { this.setData({ claiming: false }) }
   },
@@ -43,6 +43,13 @@ Page({
     this.setData({ pets, living: pets.filter(p => p.lifeStatus === 'alive'), memories: pets.filter(p => p.lifeStatus !== 'alive'), wallet: e.detail.wallet })
   },
   walletChange(e: WechatMiniprogram.CustomEvent<{ wallet: Wallet }>) { this.setData({ wallet: e.detail.wallet }) },
+  async exchange(e: WechatMiniprogram.CustomEvent<{ kind: ItemKind }>) {
+    if (!this.data.isOwner || this.data.visitorPreview || this.data.claiming) return
+    this.setData({ claiming: true })
+    try { this.setData({ wallet: await exchangeItem(e.detail.kind) }); wx.showToast({ title: '兑换成功', icon: 'success' }) }
+    catch (error) { showError(error) }
+    finally { this.setData({ claiming: false }) }
+  },
   notes(e: WechatMiniprogram.TouchEvent) { wx.navigateTo({ url: `/pages/notebook/notebook?id=${encodeURIComponent(e.currentTarget.dataset.id)}${this.data.visitorPreview?'&preview=1':''}` }) },
   create() { if(this.data.isOwner&&!this.data.visitorPreview)wx.navigateTo({ url: '/pages/create/create' }) },
   edit(e: WechatMiniprogram.TouchEvent) { if(this.data.isOwner&&!this.data.visitorPreview)wx.navigateTo({ url: `/pages/create/create?id=${encodeURIComponent(e.currentTarget.dataset.id)}` }) },

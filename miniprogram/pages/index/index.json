@@ -1,8 +1,9 @@
 {
   "usingComponents": {
-    "china-map": "/components/china-map/china-map"
+    "china-map": "/components/china-map/china-map",
+    "memorial-stone": "/components/memorial-stone/memorial-stone"
   },
-  "navigationBarTitleText": "星屿",
+  "navigationBarTitleText": "野岛",
   "navigationBarBackgroundColor": "#eaf8ff",
   "navigationBarTextStyle": "black",
   "enablePullDownRefresh": true,

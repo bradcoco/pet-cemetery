@@ -72,15 +72,20 @@ module.exports=async function(){
   console.log('✓ 总览笔记按账户隔离，禁止跨用户与跨笔记本修改；内置动物 emoji 校验与保存正常')
   console.log('✓ 云端主页只展示公开伙伴，笔记、柜位和库存不能被他人读取或修改')
   assert.equal((await call('owner-b',{action:'gift',id:first,kind:'bone',requestId:'before-claim'})).ok,false)
-  const claims=await Promise.all(Array.from({length:20},()=>call('owner-b',{action:'claimDaily'})))
-  assert.ok(claims.every(r=>r.ok));assert.deepEqual(table('wallets').get('owner-b').balances,{...baseBalances(),flower:1,bone:3,fish:1,can:1});assert.equal(table('wallets').get('owner-b').streak,1)
+  const claims=await Promise.all(Array.from({length:20},()=>call('owner-b',{action:'claimDaily',date:'2099-12-31',streak:999,points:999})))
+  assert.ok(claims.every(r=>r.ok&&r.data.points===30&&r.data.streak===1));assert.deepEqual(table('wallets').get('owner-b').balances,{...baseBalances(0)});assert.equal(table('wallets').get('owner-b').points,30)
+  assert.equal((await call('owner-b',{action:'exchange',kind:'bone',points:1})).ok,true);assert.equal(table('wallets').get('owner-b').points,10);assert.equal(table('wallets').get('owner-b').balances.bone,1)
+  assert.equal((await call('owner-b',{action:'exchange',kind:'bone',points:0})).ok,false);assert.equal(table('wallets').get('owner-b').balances.bone,1)
   const gifts=await Promise.all(Array.from({length:20},()=>call('owner-b',{action:'gift',id:first,kind:'bone',requestId:'one-click'})))
-  assert.ok(gifts.every(r=>r.ok));assert.equal(table('wallets').get('owner-b').balances.bone,2);assert.equal(table('memorials').get(first).gifts.bone,1)
+  assert.ok(gifts.every(r=>r.ok));assert.equal(table('wallets').get('owner-b').balances.bone,0);assert.equal(table('memorials').get(first).gifts.bone,1)
+  const history=await call('owner-b',{action:'gifts',id:first})
+  assert.equal(history.ok,true);assert.equal(history.data.length,1);assert.equal(history.data[0].kind,'bone');assert.equal(history.data[0].createdAt,Date.parse('2026-10-28T04:00:00Z'));assert.equal(history.data[0]._openid,undefined)
+  assert.equal((await call('owner-b',{action:'gifts',id:privatePet})).ok,false)
   assert.equal((await call('owner-b',{action:'gift',id:first,kind:'fish',requestId:'wrong-food'})).ok,false)
   assert.equal((await call('owner-b',{action:'gift',id:privatePet,kind:'bone',requestId:'private'})).ok,false)
   assert.equal((await call('owner-b',{action:'flower',id:first})).ok,false)
-  assert.equal((await call('owner-b',{action:'gift',id:first,kind:'bone',requestId:'second-click'})).ok,true)
-  assert.equal((await call('owner-b',{action:'gift',id:first,kind:'bone',requestId:'third-click'})).ok,true)
+  assert.equal((await call('owner-b',{action:'gift',id:first,kind:'bone',requestId:'second-click'})).ok,false)
+  assert.equal((await call('owner-b',{action:'gift',id:first,kind:'bone',requestId:'third-click'})).ok,false)
   assert.equal((await call('owner-b',{action:'gift',id:first,kind:'bone',requestId:'empty-wallet'})).ok,false)
   assert.equal(table('wallets').get('owner-b').balances.bone,0)
   assert.equal((await call('owner-a',{action:'wallet',user:'owner-b'})).data.balances.bone,0)
@@ -102,11 +107,17 @@ module.exports=async function(){
   const both=await Promise.all([call('owner-a',{action:'gardenSave',garden}),call('owner-a',{action:'cabinetSave',cabinet:{...cabinet,theme:'night'}})])
   assert.ok(both.every(r=>r.ok));assert.equal(table('cabinets').get('owner-a').theme,'night');assert.deepEqual(table('cabinets').get('owner-a').garden,garden)
   console.log('✓ 云端家园归属、在世/离世分区与坐标校验；家园和档案柜并发保存互不覆盖')
-  assert.equal((await call('owner-b',{action:'gift',id:stone,kind:'flower',requestId:'a-flower'})).ok,true)
-  assert.equal(table('memorials').get(stone).flowers,1);assert.equal(table('wallets').get('owner-b').balances.flower,0)
+  assert.equal((await call('owner-b',{action:'gift',id:stone,kind:'flower',requestId:'a-flower'})).ok,false)
   assert.equal((await call('owner-b',{action:'gift',id:stone,kind:'can',requestId:'wrong-memorial-gift'})).ok,false)
   const now=Date.now
-  try{Date.now=()=>now()+86400000;await call('owner-b',{action:'claimDaily'});await call('owner-b',{action:'claimDaily'});assert.equal(table('wallets').get('owner-b').balances.flower,2);assert.equal(table('wallets').get('owner-b').balances.bone,1);assert.equal(table('wallets').get('owner-b').streak,2)}finally{Date.now=now}
+  try{
+    Date.now=()=>now()+86400000
+    await call('owner-b',{action:'claimDaily'});await call('owner-b',{action:'claimDaily'})
+    assert.equal(table('wallets').get('owner-b').points,50);assert.equal(table('wallets').get('owner-b').streak,2);assert.equal(table('wallets').get('owner-b').balances.flower,0)
+    assert.equal((await call('owner-b',{action:'exchange',kind:'flower',points:1})).ok,true)
+    assert.equal((await call('owner-b',{action:'gift',id:stone,kind:'flower',requestId:'a-flower'})).ok,true)
+    assert.equal(table('memorials').get(stone).flowers,1);assert.equal(table('wallets').get('owner-b').balances.flower,0);assert.equal(table('wallets').get('owner-b').points,20)
+  }finally{Date.now=now}
   assert.equal((await call('owner-a',{action:'petOrderSave',order:[stone,first]})).ok,true)
   assert.deepEqual(JSON.parse(JSON.stringify((await call('owner-a',{action:'petOrder'})).data)),[stone,first])
   assert.deepEqual(JSON.parse(JSON.stringify((await call('owner-b',{action:'petOrder',user:'owner-a'})).data)),[])
@@ -151,13 +162,13 @@ module.exports=async function(){
   const monday=Date.parse('2026-10-26T04:00:00Z')
   for(let day=0;day<14;day++){
     Date.now=()=>monday+day*86400000
-    const results=await Promise.all(Array.from({length:20},()=>call('checkin-user',{action:'claimDaily',date:'2099-12-31',streak:999,rewards:{flower:999}})))
-    assert.ok(results.every(r=>r.ok&&r.data.streak===day+1));assert.equal(table('wallets').get('checkin-user').balances.flower,(day+1)*(day+2)/2)
+    const results=await Promise.all(Array.from({length:20},()=>call('checkin-user',{action:'claimDaily',date:'2099-12-31',streak:999,rewards:{flower:999},points:999999})))
+    assert.ok(results.every(r=>r.ok&&r.data.streak===day+1&&r.data.points===5*(day+1)*(day+6)))
   }
-  assert.deepEqual(table('wallets').get('checkin-user').balances,{...baseBalances(14),flower:105,bone:18,fish:18,can:16})
-  Date.now=()=>monday+15*86400000;const reset=await call('checkin-user',{action:'claimDaily'});assert.equal(reset.data.streak,1);assert.equal(reset.data.balances.flower,106)
+  assert.equal(table('wallets').get('checkin-user').points,5*14*19);assert.deepEqual(table('wallets').get('checkin-user').balances,{...baseBalances(0)})
+  Date.now=()=>monday+15*86400000;const reset=await call('checkin-user',{action:'claimDaily'});assert.equal(reset.data.streak,1);assert.equal(reset.data.points,5*14*19+30)
   const savedWallet=clone(table('wallets').get('checkin-user'))
   Date.now=()=>monday;assert.equal((await call('checkin-user',{action:'claimDaily'})).ok,false);assert.deepEqual(table('wallets').get('checkin-user'),savedWallet)
-  console.log('✓ 云端签到：连续 14 天每日并发只发一次，周三骨头/周六鱼干/周日罐头准确，忽略伪造日期与奖励，断签重置且回拨不重复发放')
+  console.log('✓ 云端签到：连续 14 天每日并发只发一次，首日 30 分且每天 +10，忽略伪造日期、连签与积分，断签重置且回拨不重复发放')
   }finally{Date.now=actualNow}
 }

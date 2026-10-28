@@ -18,5 +18,6 @@
     "useStaticServer": false,
     "useLanDebug": false,
     "ignoreDevUnusedFiles": true
-  }
+  },
+  "condition": {}
 }

@@ -9,7 +9,7 @@
     "pages/settings/settings"
   ],
   "window": {
-    "navigationBarTitleText": "星屿 · 小伙伴的星球",
+    "navigationBarTitleText": "野岛 · 小伙伴的星球",
     "navigationBarBackgroundColor": "#eaf8ff",
     "navigationBarTextStyle": "black",
     "backgroundColor": "#f3fbff"

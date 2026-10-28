@@ -32,7 +32,7 @@ export function normalizeGarden(raw: Garden, records: Memorial[]): Garden {
 }
 export function buildPublicGarden(raw: Garden, records: Memorial[]): PublicGarden {
   const visible=records.filter(p=>p.privacy==='public'&&!p.demo),layout=normalizeGarden(raw,visible.map(p=>({...p,owner:true}))),ids=new Set([...layout.pets.map(p=>p.petId),...layout.memorials])
-  return {layout,records:visible.filter(p=>ids.has(p.id)).map(p=>({id:p.id,name:p.name,species:p.species,stone:p.stone,markerPhoto:p.markerPhoto||'',markerPhotoUrl:p.markerPhotoUrl||'',lifeStatus:p.lifeStatus||'departed',avatarEmoji:p.avatarEmoji||'',photos:p.photos.slice(0,1),photoUrls:p.photoUrls?.slice(0,1)||[]}))}
+  return {layout,records:visible.filter(p=>ids.has(p.id)).map(p=>({id:p.id,name:p.name,species:p.species,stone:p.stone,markerPhoto:p.markerPhoto||'',markerPhotoUrl:p.markerPhotoUrl||'',lifeStatus:p.lifeStatus||'departed',avatarEmoji:p.avatarEmoji||'',photos:p.photos.slice(0,1),photoUrls:(p.photoUrls&&p.photoUrls.slice(0,1))||[]}))}
 }
 export function wanderTarget(position: {x: number; y: number}, random = Math.random): {x: number; y: number; facing: number} {
   const next = gardenPosition(position.x + (random()-.5)*26,position.y + (random()-.5)*12)

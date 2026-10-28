@@ -5,7 +5,7 @@ export function validatePetOrder(order: string[]): string {
 }
 export function orderedPets(records: Memorial[], order: string[]): Memorial[] {
   const rank=new Map(order.map((id,i)=>[id,i]))
-  return ownPets(records).sort((a,b)=>(rank.get(a.id)??order.length)-(rank.get(b.id)??order.length))
+  return ownPets(records).sort((a,b)=>{const left=rank.get(a.id),right=rank.get(b.id);return (left!=null?left:order.length)-(right!=null?right:order.length)})
 }
 export function movePetOrder(records: Memorial[], filter: PetFilter, id: string, direction: number): string[] {
   const visible=ownPets(records,filter), index=visible.findIndex(p=>p.id===id), neighbor=visible[index+direction], result=records.map(p=>p.id)

@@ -2,7 +2,7 @@ import { hasTombstone, Memorial } from './model'
 import type { PublicGarden } from './garden'
 export type ItemKind = 'flower' | 'bone' | 'fish' | 'can' | 'eternalCandle' | 'memorialGarden' | 'puppuccino' | 'candle' | 'pawHeart' | 'angelWings' | 'rose' | 'rainbowBridge' | 'heartBalloon'
 export type Inventory = Record<ItemKind, number>
-export interface Wallet { balances: Inventory; claimedOn: string; streak?: number;rewardVersion?:number }
+export interface Wallet { balances: Inventory; claimedOn: string; streak?: number; points: number; rewardVersion?: number }
 export interface GiftResult { wallet: Wallet; gifts: Inventory; flowers: number }
 export interface PublicProfile { profile: ProfileCard; pets: Memorial[]; isOwner: boolean; garden?: PublicGarden | null }
 export interface ProfileCard { id: string; nickName: string; avatarUrl: string }
@@ -23,38 +23,47 @@ export const ITEMS: { id: ItemKind; name: string; icon: string; unit: string; po
 ]
 export const emptyInventory = (): Inventory => Object.fromEntries(ITEMS.map(item=>[item.id,0])) as Inventory
 export const inventoryValue = (balances:Partial<Inventory>):number => ITEMS.reduce((sum,item)=>sum+(balances[item.id]||0)*item.points,0)
-export const receivedItems = (gifts?:Partial<Inventory>) => ITEMS.filter(item=>(gifts?.[item.id]||0)>0).map(item=>({...item,count:gifts![item.id]!}))
-export const emptyWallet = (): Wallet => ({ balances: emptyInventory(), claimedOn: '', streak: 0,rewardVersion:2 })
+export const receivedItems = (gifts?:Partial<Inventory>) => ITEMS.filter(item=>((gifts&&gifts[item.id])||0)>0).map(item=>({...item,count:gifts![item.id]!}))
+export const emptyWallet = (): Wallet => ({ balances: emptyInventory(), claimedOn: '', streak: 0, points: 0, rewardVersion: 3 })
+export const checkInPoints = (streak: number): number => 30 + (streak - 1) * 10
 export function chinaDay(now = Date.now()): string { return new Date(now + 8 * 3600000).toISOString().slice(0, 10) }
 export function cleanWallet(raw?: Wallet | null): Wallet {
-  const claimedOn=raw?.claimedOn||'',balances={...emptyInventory(),...raw?.balances}
+  const claimedOn=(raw&&raw.claimedOn)||'',balances={...emptyInventory(),...(raw&&raw.balances)}
   // 旧钱包只记录最后领取日，以最近一次签到作为新连签的第 1 天。
-  const streak=raw?.streak===undefined?(claimedOn?1:0):raw.streak
+  const streak=!raw||raw.streak===undefined?(claimedOn?1:0):raw.streak
+  const points=raw&&raw.points!=null?raw.points:0
   if(!ITEMS.every(item=>Number.isSafeInteger(balances[item.id])&&balances[item.id]>=0&&balances[item.id]<1000000000))throw new Error('物品库存状态异常，请稍后重试')
+  if(!Number.isSafeInteger(points)||points<0||points>=1000000000)throw new Error('积分状态异常，请稍后重试')
   if(typeof claimedOn!=='string'||claimedOn&&(!/^\d{4}-\d{2}-\d{2}$/.test(claimedOn)||!Number.isFinite(Date.parse(claimedOn))||new Date(claimedOn).toISOString().slice(0,10)!==claimedOn)||!Number.isSafeInteger(streak)||streak<0||Boolean(claimedOn)!==(streak>0))throw new Error('签到记录异常，请稍后重试')
-  const rewardVersion=raw?.rewardVersion??(raw?1:2)
-  if(rewardVersion!==1&&rewardVersion!==2)throw new Error('签到奖励版本异常')
-  return {balances,claimedOn,streak,rewardVersion}
+  const rewardVersion=raw?raw.rewardVersion!=null?raw.rewardVersion:1:3
+  if(rewardVersion!==1&&rewardVersion!==2&&rewardVersion!==3)throw new Error('签到奖励版本异常')
+  return {balances,claimedOn,streak,points,rewardVersion}
 }
-export function checkInStatus(raw: Wallet, now=Date.now()): {claimed:boolean;streak:number;supplement:boolean;rewards:Inventory} {
-  const wallet=cleanWallet(raw),claimedToday=wallet.claimedOn===chinaDay(now),supplement=claimedToday&&wallet.rewardVersion!==2,claimed=claimedToday&&!supplement
-  const streak=claimedToday?wallet.streak!:wallet.claimedOn===chinaDay(now-86400000)?wallet.streak!+1:1
-  const weekday=new Date(now+8*3600000).getUTCDay()
-  if(supplement)return {claimed,streak,supplement,rewards:{...Object.fromEntries(ITEMS.map(item=>[item.id,1])),flower:0} as Inventory}
-  return {claimed,streak,supplement,rewards:{...Object.fromEntries(ITEMS.map(item=>[item.id,1])),flower:streak,bone:1+(weekday===3?2:0),fish:1+(weekday===6?2:0),can:1+(weekday===0?1:0)} as Inventory}
+export function checkInStatus(raw: Wallet, now=Date.now()): {claimed:boolean;streak:number;points:number} {
+  const wallet=cleanWallet(raw),claimed=wallet.claimedOn===chinaDay(now)
+  const streak=claimed?wallet.streak!:wallet.claimedOn===chinaDay(now-86400000)?wallet.streak!+1:1
+  return {claimed,streak,points:checkInPoints(streak)}
 }
 export function applyCheckIn(raw: Wallet, now=Date.now()): Wallet {
   const wallet=cleanWallet(raw),status=checkInStatus(wallet,now),day=chinaDay(now)
   if(wallet.claimedOn>day)throw new Error('当前日期早于上次签到，请检查设备日期')
   if(status.claimed)return wallet
-  const balances={...wallet.balances}
-  for(const item of ITEMS)balances[item.id]+=status.rewards[item.id]
-  return cleanWallet({balances,claimedOn:day,streak:status.streak,rewardVersion:2})
+  const points=wallet.points+status.points
+  if(!Number.isSafeInteger(points)||points>=1000000000)throw new Error('积分已达到上限')
+  return cleanWallet({balances:wallet.balances,claimedOn:day,streak:status.streak,points,rewardVersion:3})
+}
+export function applyExchange(raw: Wallet, kind: ItemKind): Wallet {
+  const wallet=cleanWallet(raw),item=ITEMS.find(entry=>entry.id===kind)
+  if(!item)throw new Error('没有这种物品')
+  if(wallet.points<item.points)throw new Error('积分不够，先去签到吧')
+  const count=wallet.balances[kind]+1
+  if(count>=1000000000)throw new Error('这件物品已经装不下了')
+  return cleanWallet({...wallet,points:wallet.points-item.points,balances:{...wallet.balances,[kind]:count}})
 }
 export function checkInRewardText(wallet:Wallet,now=Date.now()):string {
-  const {rewards,supplement}=checkInStatus(wallet,now)
-  if(supplement)return '新增物品各 ×1 · 骨头、鱼干、罐头各补 ×1'
-  return `每种物品 ×1${rewards.flower>1?' · 鲜花额外 ×'+(rewards.flower-1):''}${rewards.bone>1?' · 小骨头额外 ×2':''}${rewards.fish>1?' · 小鱼干额外 ×2':''}${rewards.can>1?' · 小罐头额外 ×1':''}`
+  const status=checkInStatus(wallet,now)
+  if(status.claimed&&cleanWallet(wallet).rewardVersion!==3)return '今日已签到，明天起领取积分'
+  return `${status.claimed?'今日已获得':'今日可获得'} ${status.points} 积分`
 }
 export function canGive(pet: Memorial, item: ItemKind): boolean {
   const gift=ITEMS.find(i=>i.id===item)

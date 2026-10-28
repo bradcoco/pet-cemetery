@@ -1,4 +1,4 @@
-<view class="stone-wrap {{compact ? 'compact' : ''}}">
+<view class="stone-wrap {{compact ? 'compact' : ''}} {{side ? 'side' : ''}}">
   <view class="stone {{pet.stone || 'arch'}}">
     <view wx:if="{{pet.stone !== 'photo'}}" class="stone-symbol">{{pet.stone === 'star' ? '✧' : pet.stone === 'garden' ? '❀' : pet.stone === 'heart' ? '♡' : '☽'}}</view>
     <view class="stone-portrait"><pet-avatar src="{{photo}}" emoji="{{pet.avatarEmoji}}" species="{{pet.species}}"/></view>

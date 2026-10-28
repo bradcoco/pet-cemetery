@@ -1,6 +1,6 @@
 import { Memorial } from './model'
 export type MarkerPet = Pick<Memorial,'stone'|'species'|'avatarEmoji'|'photos'|'photoUrls'|'markerPhoto'|'markerPhotoUrl'>
-export const markerPhoto = (pet: MarkerPet): string => pet.markerPhotoUrl || pet.markerPhoto || pet.photoUrls?.[0] || pet.photos[0] || ''
+export const markerPhoto = (pet: MarkerPet): string => pet.markerPhotoUrl || pet.markerPhoto || (pet.photoUrls && pet.photoUrls[0]) || pet.photos[0] || ''
 export const markerAsset = (pet: MarkerPet): string => `/assets/stone-${['arch','star','garden','heart','photo'].includes(pet.stone)?pet.stone:'arch'}.png`
 export function loadMarkerImage(canvas: WechatMiniprogram.Canvas, src: string): Promise<WechatMiniprogram.Image | null> {
   if(!src)return Promise.resolve(null)

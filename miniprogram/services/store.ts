@@ -1,10 +1,12 @@
 import { CLOUD_ENV } from '../config'
 import { DEMOS } from '../data/demo'
-import { Memorial, MemorialInput, Profile, Privacy, validateMemorial, petStatusPatch } from '../utils/model'
+import { debugFixtures, DEBUG_EXTRA_IDS } from '../data/debug-pets'
+import { Memorial, MemorialInput, Profile, Privacy, today, validateMemorial, petStatusPatch } from '../utils/model'
 import { validatePetOrder } from '../utils/pet-order'
 import { isNativeApp } from '../utils/platform'
 import { Cabinet, emptyCabinet, OVERVIEW_NOTEBOOK, Note, NoteInput, validateNote } from '../utils/cabinet'
-import { canGive, cleanWallet, applyCheckIn, emptyInventory, emptyWallet, GiftResult, Inventory, ItemKind, ITEMS, PublicProfile, requestId, Wallet } from '../utils/items'
+import { canGive, cleanWallet, applyCheckIn, applyExchange, emptyInventory, emptyWallet, GiftResult, Inventory, ItemKind, ITEMS, PublicProfile, requestId, Wallet } from '../utils/items'
+import { GiftMoment } from '../utils/timeline'
 
 import { Garden, emptyGarden, normalizeGarden, validateGarden, buildPublicGarden } from '../utils/garden'
 import { NotebookInfo, NotebookInvitation, NotebookSharing, SharedNotebook, NotebookTag, validateTagName } from '../utils/notebooks'
@@ -17,6 +19,8 @@ const GUESTBOOK = 'xingyu.guestbook.v1'
 interface LocalMessage extends Omit<GuestbookMessage,'canDelete'> { user: string }
 const PET_ORDER = 'xingyu.petOrder.v1'
 const RECORDS = 'xingyu.memorials.v1'
+const DEBUG_PETS = 'xingyu.debugPets.v1'
+const DEBUG_PETS_MORE = 'xingyu.debugPets.v2'
 const PROFILE = 'xingyu.profile.v1'
 const CABINET = 'xingyu.cabinet.v1'
 const NOTES = 'xingyu.notes.v1'
@@ -24,7 +28,7 @@ const NOTEBOOK_SETTINGS = 'xingyu.notebookSettings.v1'
 interface LocalNotebookSettings { tags?: NotebookTag[]; privacy?: Privacy }
 function notebookSettings(): Record<string, LocalNotebookSettings> { return wx.getStorageSync(NOTEBOOK_SETTINGS) || {} }
 const ECONOMY = 'xingyu.economy.v1'
-interface Economy { wallet: Wallet; gifts: Record<string, Inventory>; receipts: { id: string; petId: string; kind: ItemKind }[] }
+interface Economy { wallet: Wallet; gifts: Record<string, Inventory>; receipts: { id: string; petId: string; kind: ItemKind; createdAt?: number }[] }
 function economy(): Economy { const state=wx.getStorageSync(ECONOMY)||{wallet:emptyWallet(),gifts:{},receipts:[]};return {...state,wallet:cleanWallet(state.wallet)} }
 export const isCloud = Boolean(CLOUD_ENV) && !isNativeApp()
 export const modeLabel = isCloud ? '云端账户' : '本机体验 · 数据仅保存在当前设备'
@@ -52,6 +56,52 @@ function decorate(m: Memorial): Memorial {
   const extra = {...emptyInventory(),...economy().gifts[m.id]}, gifts = { ...emptyInventory(), ...(m.gifts || {}), flower: m.flowers }
   for (const item of ITEMS) gifts[item.id] += extra[item.id]
   return { ...m, ownerId: m.demo ? 'demo-garden' : 'local-guardian', gifts, flowers: gifts.flower }
+}
+export function seedDebugPets(): void {
+  if (isCloud || wx.getStorageSync(DEBUG_PETS_MORE)) return
+  const fixtures = debugFixtures(today())
+  const onlyExtra = Boolean(wx.getStorageSync(DEBUG_PETS))
+  const pool = onlyExtra ? fixtures.records.filter(pet => DEBUG_EXTRA_IDS.includes(pet.id)) : fixtures.records
+  const existing = (wx.getStorageSync(RECORDS) || []) as Memorial[]
+  const known = new Set(existing.map(pet => pet.id))
+  const adding = pool.filter(pet => !known.has(pet.id))
+  if (adding.length) {
+    let next = Math.max(Number(wx.getStorageSync('xingyu.nextPetNo.v1')) || 0, ...existing.map(pet => pet.no ? Number(pet.no) + 1 : 0), 0)
+    for (const pet of adding) pet.no = String(next++).padStart(6, '0')
+    const records = [...adding, ...existing]
+    writeRecords(records)
+    wx.setStorageSync('xingyu.nextPetNo.v1', next)
+    const notes = (wx.getStorageSync(NOTES) || []) as Note[]
+    const noteIds = new Set(notes.map(note => note.id))
+    wx.setStorageSync(NOTES, [...fixtures.notes.filter(note => !noteIds.has(note.id) && (note.memorialId === OVERVIEW_NOTEBOOK || adding.some(pet => pet.id === note.memorialId))), ...notes])
+    const settings = notebookSettings()
+    for (const [id, value] of Object.entries(fixtures.notebookSettings)) {
+      if (!adding.some(pet => pet.id === id)) continue
+      const tags = (settings[id] && settings[id].tags) || []
+      settings[id] = { ...settings[id], tags: [...tags, ...value.tags.filter(tag => !tags.some(item => item.id === tag.id || item.name === tag.name))] }
+    }
+    wx.setStorageSync(NOTEBOOK_SETTINGS, settings)
+    const order = ((wx.getStorageSync(PET_ORDER) || []) as string[]).filter(id => !adding.some(pet => pet.id === id))
+    wx.setStorageSync(PET_ORDER, [...adding.map(pet => pet.id), ...order])
+    const raw = (wx.getStorageSync(GARDEN) || emptyGarden()) as Garden
+    const placed = new Set([...raw.pets.map(pet => pet.petId), ...raw.memorials])
+    const addedIds = new Set(adding.map(pet => pet.id))
+    wx.setStorageSync(GARDEN, normalizeGarden({ pets: [...raw.pets, ...fixtures.garden.pets.filter(pet => addedIds.has(pet.petId) && !placed.has(pet.petId))], memorials: [...raw.memorials, ...fixtures.garden.memorials.filter(id => addedIds.has(id) && !placed.has(id))] }, records))
+    const state = economy()
+    state.receipts = state.receipts || []
+    const receiptIds = new Set(state.receipts.map(receipt => receipt.id))
+    state.receipts = [...fixtures.receipts.filter(receipt => addedIds.has(receipt.petId) && !receiptIds.has(receipt.id)), ...state.receipts]
+    if (!state.wallet.points && !state.wallet.claimedOn) {
+      state.wallet.points = 200
+      state.wallet.balances.bone += 2
+      state.wallet.balances.flower += 2
+      state.wallet.balances.fish += 1
+      state.wallet.balances.heartBalloon += 3
+    }
+    wx.setStorageSync(ECONOMY, state)
+  }
+  wx.setStorageSync(DEBUG_PETS, 1)
+  wx.setStorageSync(DEBUG_PETS_MORE, 1)
 }
 export async function listMemorials(mine = false): Promise<Memorial[]> {
   if (isCloud) {
@@ -97,7 +147,7 @@ export async function saveMemorial(input: MemorialInput, id = '', creationKey = 
   const next = Math.max(Number(wx.getStorageSync('xingyu.nextPetNo.v1')) || 0, ...records.map(m => m.no ? Number(m.no) + 1 : 0))
   if (!previous && next > 999999) throw new Error('本机的六位宠物编号已用完')
   const normalized = input.hasMemorial === false || input.lifeStatus === 'alive' ? { ...input, hasMemorial: false, latitude: 0, longitude: 0, locationName: '', departed: input.lifeStatus === 'alive' ? '' : input.departed } : input
-  const record: Memorial = { ...normalized,markerPhoto:input.markerPhoto===undefined?previous?.markerPhoto||'':input.markerPhoto,memorialNotebook:input.memorialNotebook===undefined?previous?.memorialNotebook!==false:input.memorialNotebook, notebookEnabled:input.notebookEnabled===undefined?previous?.notebookEnabled!==false:input.notebookEnabled,notebookPrivacy:input.notebookPrivacy===undefined?previous?.notebookPrivacy||'private':input.notebookPrivacy,id: previous ? previous.id : `local-${creationKey}`, no: previous ? previous.no : String(next).padStart(6, '0'), flowers: previous ? previous.flowers : 0, gifts: previous ? previous.gifts : emptyInventory(), createdAt: previous ? previous.createdAt : Date.now(), owner: true }
+  const record: Memorial = { ...normalized,markerPhoto:input.markerPhoto===undefined?(previous&&previous.markerPhoto)||'':input.markerPhoto,memorialNotebook:input.memorialNotebook===undefined?(previous&&previous.memorialNotebook)!==false:input.memorialNotebook, notebookEnabled:input.notebookEnabled===undefined?(previous&&previous.notebookEnabled)!==false:input.notebookEnabled,notebookPrivacy:input.notebookPrivacy===undefined?(previous&&previous.notebookPrivacy)||'private':input.notebookPrivacy,id: previous ? previous.id : `local-${creationKey}`, no: previous ? previous.no : String(next).padStart(6, '0'), flowers: previous ? previous.flowers : 0, gifts: previous ? previous.gifts : emptyInventory(), createdAt: previous ? previous.createdAt : Date.now(), owner: true }
   writeRecords([record, ...records.filter(m => m.id !== record.id)])
   if (!previous) wx.setStorageSync('xingyu.nextPetNo.v1', next + 1)
   return record.id
@@ -174,11 +224,11 @@ export async function getNotebook(memorialId: string, bookId = '', preview = fal
   }
   if(bookId)throw new Error(collaborationUnavailable)
   const pet=memorialId===OVERVIEW_NOTEBOOK?null:await getMemorial(memorialId)
-  if(pet?.notebookEnabled===false)throw new Error('这只宠物尚未开启笔记本，请在档案编辑中开启')
+  if(pet&&pet.notebookEnabled===false)throw new Error('这只宠物尚未开启笔记本，请在档案编辑中开启')
   const isOwner=!preview&&(!pet||pet.owner&&!pet.demo)
   if(pet&&!isOwner&&pet.notebookPrivacy!=='public')throw new Error('这本笔记需要主人邀请后才能查看')
   const profile=await getProfile()
-  const cover=pet?{id:pet.id,name:pet.name,species:pet.species,no:pet.no,avatarEmoji:pet.avatarEmoji,photos:pet.photos.slice(0,1),photoUrls:pet.photoUrls?.slice(0,1)}:null
+  const cover=pet?{id:pet.id,name:pet.name,species:pet.species,no:pet.no,avatarEmoji:pet.avatarEmoji,photos:pet.photos.slice(0,1),photoUrls:pet.photoUrls&&pet.photoUrls.slice(0,1)}:null
   const settings=notebookSettings()[memorialId]||{}
   const privacy=pet?pet.notebookPrivacy||'private':settings.privacy||'private'
   if(preview&&privacy!=='public')throw new Error('这本笔记仅对主人和受邀好友可见，普通访客无法查看')
@@ -246,7 +296,7 @@ export async function saveNote(memorialId: string, input: NoteInput, id = '', bo
   if(!info.canWrite)throw new Error('笔记仅主人或已邀请的共写好友可以编辑')
   const notes = (wx.getStorageSync(NOTES) || []) as Note[], previous = notes.find(n => n.id === id && n.memorialId === memorialId)
   if (id && !previous) throw new Error('这篇笔记不存在')
-  const tagIds=input.tagIds===undefined?(previous?.tagIds||[]).filter(id=>info.tags.some(t=>t.id===id)):input.tagIds
+  const tagIds=input.tagIds===undefined?((previous&&previous.tagIds)||[]).filter(id=>info.tags.some(t=>t.id===id)):input.tagIds
   if(tagIds.some(id=>!info.tags.some(t=>t.id===id)))throw new Error('部分标签已被删除，请重新选择标签')
   const note: Note = { ...input, tagIds, id: previous ? previous.id : `note-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, memorialId, createdAt: previous ? previous.createdAt : Date.now(), updatedAt: Date.now() }
   wx.setStorageSync(NOTES, [note, ...notes.filter(n => n.id !== note.id)])
@@ -259,12 +309,23 @@ export async function deleteNote(memorialId: string, id: string, bookId = ''): P
   if (!notes.some(n => n.id === id&&n.canDelete)) throw new Error('这篇笔记不存在，或你没有删除权限')
   wx.setStorageSync(NOTES, ((wx.getStorageSync(NOTES) || []) as Note[]).filter(n => n.id !== id))
 }
+export async function listGiftMoments(petId: string): Promise<GiftMoment[]> {
+  if (isCloud) return call<GiftMoment[]>('gifts', { id: petId })
+  return (economy().receipts || []).filter(receipt => receipt.petId === petId && Number.isFinite(receipt.createdAt)).map(receipt => ({ id: receipt.id, kind: receipt.kind, createdAt: receipt.createdAt as number })).sort((a, b) => a.createdAt - b.createdAt)
+}
 export async function getWallet(): Promise<Wallet> { return isCloud ? call<Wallet>('wallet') : economy().wallet }
 export async function claimDaily(): Promise<Wallet> {
   if (isCloud) return call<Wallet>('claimDaily')
   const state = economy(),wallet=applyCheckIn(state.wallet)
-  if(state.wallet.claimedOn!==wallet.claimedOn||state.wallet.rewardVersion!==wallet.rewardVersion)wx.setStorageSync(ECONOMY,{...state,wallet})
+  if(state.wallet.claimedOn!==wallet.claimedOn||state.wallet.rewardVersion!==wallet.rewardVersion||state.wallet.points!==wallet.points)wx.setStorageSync(ECONOMY,{...state,wallet})
   state.wallet=wallet
+  return state.wallet
+}
+export async function exchangeItem(kind: ItemKind): Promise<Wallet> {
+  if (isCloud) return call<Wallet>('exchange', { kind })
+  const state = economy(), wallet = applyExchange(state.wallet, kind)
+  wx.setStorageSync(ECONOMY, { ...state, wallet })
+  state.wallet = wallet
   return state.wallet
 }
 export async function sendGift(petId: string, kind: ItemKind, key = requestId()): Promise<GiftResult> {
@@ -275,12 +336,12 @@ export async function sendGift(petId: string, kind: ItemKind, key = requestId())
   const state = economy(), receipt = state.receipts.find(r => r.id === key)
   if (receipt && (receipt.petId !== petId || receipt.kind !== kind)) throw new Error('赠礼请求不一致，请重新打开礼物盒')
   if (!receipt) {
-    if (!Number.isSafeInteger(state.wallet.balances[kind]) || state.wallet.balances[kind] < 1) throw new Error('这件物品用完了，先看看签到奖励吧')
-    const count=state.gifts[petId]?.[kind]??0
+    if (!Number.isSafeInteger(state.wallet.balances[kind]) || state.wallet.balances[kind] < 1) throw new Error('这件物品用完了，先签到赚积分再兑换')
+    const held=state.gifts[petId],count=held&&held[kind]!=null?held[kind]:0
     if(!Number.isSafeInteger(count)||count<0||count>=Number.MAX_SAFE_INTEGER)throw new Error('礼物计数异常，请稍后重试')
     state.wallet.balances[kind]--
     state.gifts[petId] = {...emptyInventory(),...state.gifts[petId]}
-    state.gifts[petId][kind]=count+1; state.receipts.push({ id: key, petId, kind })
+    state.gifts[petId][kind]=count+1; state.receipts.push({ id: key, petId, kind, createdAt: Date.now() })
     wx.setStorageSync(ECONOMY, state)
   }
   const pet = decorate(raw)

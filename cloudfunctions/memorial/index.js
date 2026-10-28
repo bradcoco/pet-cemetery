@@ -1,7 +1,7 @@
 'use strict'
 const cloud = require('wx-server-sdk')
 const { createHash, randomBytes } = require('crypto')
-const { cleanInput, ownFile, readable, owned, cleanCabinet, cleanGarden, cleanNote, itemKinds, emptyWallet, cleanWallet, canGive, applyCheckIn, cleanPetOrder, petStatusPatch, buildPublicGarden, cleanPetPrivacyPatch } = require('./domain')
+const { cleanInput, ownFile, readable, owned, cleanCabinet, cleanGarden, cleanNote, itemKinds, emptyWallet, cleanWallet, canGive, applyCheckIn, applyExchange, cleanPetOrder, petStatusPatch, buildPublicGarden, cleanPetPrivacyPatch } = require('./domain')
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database({ throwOnNotFound: false })
 const records = db.collection('memorials')
@@ -11,6 +11,7 @@ const notes = db.collection('notes')
 const wallets = db.collection('wallets')
 const notebookShares = db.collection('notebookShares')
 const guestbook = db.collection('guestbookMessages')
+const giftEvents = db.collection('giftEvents')
 const publicId = openid => createHash('sha256').update(`profile:${openid}`).digest('hex').slice(0, 24)
 const deny = () => { throw new Error('这份纪念不存在，或仅对主人可见') }
 async function find(collection, id) {
@@ -103,7 +104,7 @@ async function give(openid, event) {
       if (previous.petId !== id || previous.kind !== kind) throw new Error('赠礼请求不一致，请重新打开礼物盒')
       return { wallet, gifts, flowers: gifts.flower }
     }
-    if (wallet.balances[kind] < 1) throw new Error('这件物品用完了，先看看签到奖励吧')
+    if (wallet.balances[kind] < 1) throw new Error('这件物品用完了，先签到赚积分再兑换')
     if (!Number.isSafeInteger(gifts[kind]) || gifts[kind] < 0 || gifts[kind] >= Number.MAX_SAFE_INTEGER) throw new Error('礼物计数异常，请稍后重试')
     wallet.balances[kind]--; gifts[kind]++
     await walletRef.set({ data: { ...wallet, _openid: openid } })
@@ -182,11 +183,25 @@ exports.main = async (event) => {
         })
         return {ok:true,data:null}
       }
+      case 'gifts': {
+        const id = validId(event.id), pet = await find(records, id)
+        if (!readable(pet, openid)) deny()
+        const result = await giftEvents.where({ petId: id }).orderBy('createdAt', 'asc').limit(100).get()
+        return { ok: true, data: result.data.filter(row => itemKinds.includes(row.kind) && Number.isFinite(row.createdAt)).map(row => ({ id: row._id, kind: row.kind, createdAt: row.createdAt })) }
+      }
       case 'wallet': return { ok: true, data: cleanWallet(await find(wallets, openid)) }
       case 'claimDaily': {
         const wallet = await db.runTransaction(async transaction => {
           const ref = transaction.collection('wallets').doc(openid), current = cleanWallet((await ref.get()).data),next=applyCheckIn(current)
-          if(current.claimedOn!==next.claimedOn||current.rewardVersion!==next.rewardVersion)await ref.set({data:{...next,_openid:openid}})
+          if(current.claimedOn!==next.claimedOn||current.rewardVersion!==next.rewardVersion||current.points!==next.points)await ref.set({data:{...next,_openid:openid}})
+          return next
+        })
+        return { ok: true, data: wallet }
+      }
+      case 'exchange': {
+        const wallet = await db.runTransaction(async transaction => {
+          const ref = transaction.collection('wallets').doc(openid), next = applyExchange(cleanWallet((await ref.get()).data), event.kind)
+          await ref.set({ data: { ...next, _openid: openid } })
           return next
         })
         return { ok: true, data: wallet }

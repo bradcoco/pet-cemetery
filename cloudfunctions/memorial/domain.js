@@ -61,26 +61,34 @@ function cleanNote(input, openid) {
   return { title, content, date, photos: input.photos, ...(tagIds===undefined?{}:{tagIds}) }
 }
 const itemKinds = ['flower','bone','fish','can','eternalCandle','memorialGarden','puppuccino','candle','pawHeart','angelWings','rose','rainbowBridge','heartBalloon']
-function emptyWallet() { return { balances: Object.fromEntries(itemKinds.map(kind=>[kind,0])), claimedOn: '', streak:0,rewardVersion:2 } }
+const itemPoints = { flower:30, bone:20, fish:15, can:45, eternalCandle:100, memorialGarden:80, puppuccino:50, candle:35, pawHeart:40, angelWings:60, rose:25, rainbowBridge:70, heartBalloon:10 }
+function checkInPoints(streak) { return 30 + (streak - 1) * 10 }
+function emptyWallet() { return { balances: Object.fromEntries(itemKinds.map(kind=>[kind,0])), claimedOn: '', streak:0, points:0, rewardVersion:3 } }
 function cleanWallet(raw) {
   const claimedOn=raw&&raw.claimedOn||''
-  const wallet = raw ? { balances: { ...emptyWallet().balances, ...raw.balances }, claimedOn, streak:raw.streak===undefined?(claimedOn?1:0):raw.streak } : emptyWallet()
+  const wallet = raw ? { balances: { ...emptyWallet().balances, ...raw.balances }, claimedOn, streak:raw.streak===undefined?(claimedOn?1:0):raw.streak, points:raw.points===undefined?0:raw.points } : emptyWallet()
   if (!itemKinds.every(kind => Number.isSafeInteger(wallet.balances[kind]) && wallet.balances[kind] >= 0 && wallet.balances[kind] < 1000000000)) throw new Error('物品库存状态异常，请稍后重试')
+  if(!Number.isSafeInteger(wallet.points)||wallet.points<0||wallet.points>=1000000000)throw new Error('积分状态异常，请稍后重试')
   if(typeof claimedOn!=='string'||claimedOn&&(!/^\d{4}-\d{2}-\d{2}$/.test(claimedOn)||!Number.isFinite(Date.parse(claimedOn))||new Date(claimedOn).toISOString().slice(0,10)!==claimedOn)||!Number.isSafeInteger(wallet.streak)||wallet.streak<0||Boolean(claimedOn)!==(wallet.streak>0))throw new Error('签到记录异常，请稍后重试')
-  wallet.rewardVersion=raw&&raw.rewardVersion!==undefined?raw.rewardVersion:raw?1:2
-  if(wallet.rewardVersion!==1&&wallet.rewardVersion!==2)throw new Error('签到奖励版本异常')
+  wallet.rewardVersion=raw&&raw.rewardVersion!==undefined?raw.rewardVersion:raw?1:3
+  if(wallet.rewardVersion!==1&&wallet.rewardVersion!==2&&wallet.rewardVersion!==3)throw new Error('签到奖励版本异常')
   return wallet
 }
 function applyCheckIn(raw,now=Date.now()) {
   const wallet=cleanWallet(raw),day=chinaDay(now)
   if(wallet.claimedOn>day)throw new Error('当前日期早于上次签到，请检查设备日期')
-  const supplement=wallet.claimedOn===day&&wallet.rewardVersion!==2
-  if(wallet.claimedOn===day&&!supplement)return wallet
-  const streak=supplement?wallet.streak:wallet.claimedOn===chinaDay(now-86400000)?wallet.streak+1:1,weekday=new Date(now+8*3600000).getUTCDay()
-  const rewards={...Object.fromEntries(itemKinds.map(kind=>[kind,1])),flower:streak,bone:1+(weekday===3?2:0),fish:1+(weekday===6?2:0),can:1+(weekday===0?1:0)},balances={...wallet.balances}
-  if(supplement){for(const kind of itemKinds)rewards[kind]=kind==='flower'?0:1}
-  for(const kind of itemKinds)balances[kind]+=rewards[kind]
-  return cleanWallet({balances,claimedOn:day,streak,rewardVersion:2})
+  if(wallet.claimedOn===day)return wallet
+  const streak=wallet.claimedOn===chinaDay(now-86400000)?wallet.streak+1:1,points=wallet.points+checkInPoints(streak)
+  if(!Number.isSafeInteger(points)||points>=1000000000)throw new Error('积分已达到上限')
+  return cleanWallet({balances:wallet.balances,claimedOn:day,streak,points,rewardVersion:3})
+}
+function applyExchange(raw,kind) {
+  const wallet=cleanWallet(raw)
+  if(!itemKinds.includes(kind))throw new Error('没有这种物品')
+  if(wallet.points<itemPoints[kind])throw new Error('积分不够，先去签到吧')
+  const count=wallet.balances[kind]+1
+  if(count>=1000000000)throw new Error('这件物品已经装不下了')
+  return cleanWallet({...wallet,points:wallet.points-itemPoints[kind],balances:{...wallet.balances,[kind]:count}})
 }
 function canGive(pet, kind) {
   if(!itemKinds.includes(kind))return false
@@ -89,7 +97,7 @@ function canGive(pet, kind) {
   return pet.hasMemorial!==false&&(universal||['flower','eternalCandle','memorialGarden','candle','angelWings','rose','rainbowBridge'].includes(kind))
 }
 function chinaDay(now = Date.now()) { return new Date(now + 8 * 3600000).toISOString().slice(0, 10) }
-module.exports = { cleanPetPrivacyPatch, buildPublicGarden, applyCheckIn, cleanPetOrder, petStatusPatch, cleanGarden, cleanInput, ownFile, readable, owned, cleanCabinet, cleanNote, itemKinds, emptyWallet, cleanWallet, canGive, chinaDay }
+module.exports = { cleanPetPrivacyPatch, buildPublicGarden, applyCheckIn, applyExchange, checkInPoints, cleanPetOrder, petStatusPatch, cleanGarden, cleanInput, ownFile, readable, owned, cleanCabinet, cleanNote, itemKinds, itemPoints, emptyWallet, cleanWallet, canGive, chinaDay }
 
 function cleanPetPrivacyPatch(patch) {
   if(!patch||typeof patch!=='object'||Array.isArray(patch))throw new Error('隐私设置格式不正确')
